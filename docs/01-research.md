@@ -1,204 +1,179 @@
-# 01 · Research & Product Thinking
+# 01 Research
 
-> Goal of this document: understand the problem space before designing anything, and derive concrete design decisions from what already exists.
-> Every section ends with **→ Implication**, the design decision it leads to.
+Before designing anything I looked at how existing support tools handle knowledge, which methods already exist for reusing past cases, and what kind of problems Viamedici's customers actually have. Each section ends with what I took from it for the design. The decisions are numbered D1 to D11 at the end, and the product document refers to them.
 
----
+## 1. The problem
 
-## 1. Problem framing
+When a solution engineer solves a customer case, what they learned ends up in three places:
 
-Viamedici's solution experts accumulate knowledge every time they solve a customer case. Today that knowledge is spread across:
+- the ticket history, written for that moment and hard to reuse later
+- the engineer's own head, which is lost when people change teams or leave
+- documents and wiki pages, which are structured but not connected to the cases they came from
 
-- ticket histories (unstructured, written for the moment, not for reuse)
-- individual engineers' heads (tacit knowledge, lost when people move on)
-- documents / wikis (structured, but disconnected from the cases that produced them)
+So a new case often gets investigated from scratch, even though someone solved something similar a year ago. Storing the history isn't the hard part. The hard part is finding the right old case at the right time and knowing if its fix still applies.
 
-The cost is **re-investigation**: a new case is investigated from zero even though a similar case was solved before. The hard part is not *storing* history. It is **retrieving the right history at the right moment and judging whether it applies**.
+An old solution only helps if:
 
-A previous solution is only useful if:
-1. it can be **found** even when the new case is described in different words,
-2. the engineer can see **evidence** that it worked (and where it did not),
-3. the engineer can judge **applicability** (same module? same version? same integration?),
-4. new solutions flow **back** into the knowledge base with low effort.
+1. it can be found even when the new case is written in different words
+2. the engineer can see whether it actually worked before, and where it didn't
+3. the engineer can tell if it applies to this customer (same module, version, integrations)
+4. new solutions get back into the knowledge base without much extra work
 
-**→ Implication:** the product is not a ticket system. It is a *knowledge reuse loop* attached to case work. Success = less time to resolution, more reused solutions, and a knowledge base that improves with every case.
+**Takeaway:** this shouldn't be another ticket system. It should be a loop around case work: find old knowledge, use it, and save what was learned.
 
----
+## 2. Existing case and ticket tools
 
-## 2. Existing enterprise case / ticket management systems
-
-| Product | What it does well | Relevant AI / knowledge features | Gap for our problem |
+| Tool | Good at | AI / knowledge features | What's missing for this problem |
 |---|---|---|---|
-| **ServiceNow ITSM / CSM** | Strict ITIL processes: Incident → Problem → Known Error; strong workflow engine | Similar-incident suggestions, knowledge article recommendations, generative case summaries | Knowledge articles are a separate silo; "did this fix actually work, and in which environment" is weakly modelled |
-| **Jira Service Management** | Developer-friendly, links tickets to engineering issues; Confluence as KB | AI-suggested articles, ticket summarisation, related-issue grouping | KB lives in Confluence pages: unstructured, no outcome tracking per solution |
-| **Zendesk** | Fast agent UX, macros, help center | AI agents for deflection, intent detection, suggested macros | Optimised for high-volume B2C deflection, not deep technical investigation |
-| **Salesforce Service Cloud** | Case object tightly integrated with CRM/customer data; Knowledge object | Case classification, article recommendations, reply generation | Strong on customer context, weak on technical environment and investigation steps |
+| ServiceNow ITSM / CSM | ITIL processes (incident, problem, known error), workflows | Similar incident suggestions, article recommendations, case summaries | Knowledge articles are separate from cases; whether a fix worked in a given environment isn't really tracked |
+| Jira Service Management | Linking tickets to dev issues, Confluence as knowledge base | Suggested articles, ticket summaries, grouping related issues | Knowledge is free text in Confluence, no outcomes per solution |
+| Zendesk | Fast agent UI, macros, help center | Bots for deflection, intent detection, suggested macros | Built for high-volume B2C support, not long technical investigations |
+| Salesforce Service Cloud | Cases linked to CRM and customer data | Case classification, article recommendations, reply drafts | Strong on customer data, weak on technical environment and investigation steps |
 
-**Common patterns worth adopting**
-- Case ↔ knowledge article linking ("attach article to case")
-- Suggested articles shown *while* working the case, not in a separate search tool
-- Status workflows and role-based permissions
-- Audit trail of every change
+Things worth copying from them: linking articles to cases, showing suggestions while the case is being worked on (not in a separate search page), status workflows, roles and an audit trail.
 
-**Common weaknesses we can address**
-1. **Ticket-centric, not solution-centric.** The unit of value is the ticket; knowledge is a by-product.
-2. **No outcome evidence.** Few systems track "this solution was applied 8 times, succeeded 7, failed once on version X".
-3. **No environment-aware applicability.** Similarity is computed on text alone, ignoring version / module / integration.
-4. **The investigation is lost.** Systems keep the final answer but not the path (what was checked, what was ruled out). For a hard technical problem, the ruled-out hypotheses are often the most valuable part.
+Things they mostly don't do:
 
-**→ Implication:** model **Cases** and **Solutions** as separate first-class entities connected by an **outcome-bearing relation**. Model **investigation steps** explicitly, and model the **environment** (version, modules, integrations) as structured data so applicability can be computed.
+1. The ticket is the main thing and knowledge comes second.
+2. They don't record outcomes, e.g. "applied 8 times, worked 7 times, failed once on version X".
+3. Similarity is based on text only. Version, modules and integrations are ignored.
+4. Only the final answer is kept, not the investigation. What was checked and ruled out is often the most useful part for hard cases.
 
----
+**Takeaway:** cases and solutions should be separate tables, joined by a relation that records the outcome. Investigation steps get their own table, and the customer environment (version, modules, integrations) is structured data so applicability can be checked.
 
-## 3. Knowledge & solution management
+## 3. Knowledge management methods
 
-### 3.1 KCS: Knowledge-Centered Service (Consortium for Service Innovation)
+### KCS (Knowledge-Centered Service)
 
-KCS is the industry methodology for support knowledge. Its core ideas map almost one-to-one to the brief:
+KCS is the method most support organisations use for knowledge. A lot of it matches the brief:
 
-- **Solve Loop** (per case): *Capture* knowledge in the workflow, *Structure* it in a standard template, *Reuse* it by searching early and often, *Improve* it every time it is reused.
-- **Evolve Loop** (organisation level): content health, process integration, performance assessment, leadership.
-- **"Search early, search often."** Searching the knowledge base is the first step of every case, not the last resort.
-- **"Reuse is review."** Every time an article is reused, it gets validated or corrected, so knowledge quality improves through use instead of separate editorial work.
-- **Standard article structure:** *Issue* (customer's words), *Environment* (product, version, config), *Resolution*, *Cause*.
-- **Article lifecycle:** Work in Progress → Not Validated → Validated → Archived.
+- Knowledge is captured while solving the case, in a fixed structure, and improved every time it's reused.
+- "Search early, search often": search the knowledge base at the start of every case.
+- "Reuse is review": each reuse checks whether the article is still correct.
+- Article structure: Issue, Environment, Resolution, Cause.
+- Lifecycle: work in progress, not validated, validated, archived.
 
-**→ Implication:**
-- Solution schema = **Issue / Environment / Cause / Resolution** (+ verification steps).
-- Solution status follows the KCS lifecycle: `draft → not_validated → validated → archived`.
-- Every case outcome updates the solution's **track record** ("reuse is review").
-- The AI runs a search **automatically on case creation** ("search early").
+**Takeaway:**
 
-### 3.2 ITIL 4: Incident, Problem, Known Error
+- Solutions use the fields Issue, Environment, Cause, Resolution plus verification steps.
+- Status follows KCS: `draft`, `not_validated`, `validated`, `archived`.
+- Every case outcome updates the solution's track record.
+- The analysis starts automatically when a case is created.
 
-- **Incident:** one occurrence of a disruption (≈ our *Case*).
-- **Problem:** the underlying cause of one or more incidents.
-- **Known Error:** a problem with a documented root cause and workaround (≈ our *Solution*).
+### ITIL 4
 
-Distinguishing these matters: ten cases about "products missing in webshop" may come from **one** problem (e.g. a changed export mapping in a release). Spotting such clusters early is very valuable for a software vendor, because it points at product bugs.
+ITIL separates an **incident** (one occurrence, like our case), a **problem** (the underlying cause behind one or more incidents) and a **known error** (a problem with a known cause and workaround, like our solution).
 
-**→ Implication:** a root-cause taxonomy shared across cases and solutions. Stretch goal: a *Problem Management agent* that clusters recurring cases without a solution and proposes a Problem record.
+This matters for a software vendor. Ten cases about products missing in the webshop could all come from one change in a release, which is really a product bug.
 
----
+**Takeaway:** a shared root cause list for cases and solutions, and a problem detection agent that groups open cases with the same symptoms and proposes a problem record.
 
-## 4. How historical cases help solve new problems: Case-Based Reasoning
+## 4. Case-based reasoning
 
-Case-Based Reasoning (CBR, Aamodt & Plaza, 1994) describes how experts reuse past experience as a 4-step cycle:
+Case-based reasoning (Aamodt & Plaza, 1994) describes how experts use past experience in four steps:
 
-1. **Retrieve** the most similar past case(s)
-2. **Reuse** their solution for the new problem
-3. **Revise** the proposed solution (test it, adapt it)
-4. **Retain** the new experience for future use
+1. Retrieve the most similar past cases
+2. Reuse their solution
+3. Revise it for the new situation
+4. Retain the new experience
 
-This is exactly the brief's flow: *New Case → Historical Knowledge → AI Assistance → Engineer → Solution → New Knowledge*. CBR also shows that **similarity is more than text similarity**: matching on structured features (here: module, version, integration, error code) is as important as matching on the description.
+This is basically the flow in the brief (new case, history, AI help, engineer, solution, new knowledge). The paper also points out that similarity isn't only about text. Structured features matter just as much, which here means module, version, integration and error codes.
 
-**→ Implication:** the platform's architecture follows the CBR cycle. Retrieval uses **text + structured features**. Reuse includes an **applicability check**. Revise is the engineer's investigation. Retain is the **knowledge capture** step.
+**Takeaway:** the platform follows these four steps. Search uses text and structured features, reuse includes an applicability check, revise is the engineer's investigation, and retain is knowledge capture.
 
----
+## 5. Search
 
-## 5. Search & similarity
-
-| Technique | Strength | Weakness in support data |
+| Method | Good at | Bad at |
 |---|---|---|
-| **Lexical / full-text (BM25, PostgreSQL FTS)** | Exact error codes, class names, log strings, version numbers | Misses paraphrases ("not showing" vs "missing") |
-| **Dense vector embeddings** | Semantic paraphrase matching, multilingual | Weak on exact identifiers; "ERR-4012" and "ERR-4021" look alike to an embedding |
-| **Trigram / fuzzy** | Typos, partial identifiers | Noisy on long text |
-| **Structured filters / boosts** | Module, version, integration, customer environment | Needs structured data to exist |
-| **LLM re-ranking** | Judges *relevance to this case*, can explain why | Cost and latency, so only on a short candidate list |
+| Full text (PostgreSQL FTS, BM25) | Exact error codes, class names, version numbers | Different wording ("not showing" vs "missing") |
+| Vector embeddings | Same meaning in different words | Exact codes, "ERR-4012" and "ERR-4021" look almost the same |
+| Trigram | Typos and partial codes | Noisy on long text |
+| Filters / boosts | Module, version, integration | Needs structured data |
+| LLM judging | Relevance to this specific case, with a reason | Slow and costs tokens, so only for a few candidates |
 
-**Hybrid retrieval** combines lexical and dense results. A robust, parameter-light way to merge rankings is **Reciprocal Rank Fusion** (Cormack, Clarke & Buettcher, 2009): `score = Σ 1 / (k + rank_i)`. Support data mixes natural-language symptoms with exact technical tokens, which is the textbook case where hybrid search beats either method alone. The evaluation harness will test that claim on our own data (ablation study).
+Support tickets mix normal sentences with exact technical strings, so neither full text nor vectors are enough on their own. Reciprocal Rank Fusion (Cormack et al., 2009) is a simple way to combine several rankings: each result gets `1 / (k + rank)` from each list and the scores are added up.
 
-**→ Implication:** PostgreSQL does it all in one database: `tsvector` FTS + `pgvector` + `pg_trgm`, merged via RRF in a SQL function, boosted by structured environment similarity, then **LLM re-ranking** of the top candidates with a written rationale.
+**Takeaway:** everything stays in PostgreSQL: FTS, pgvector and pg_trgm, combined with RRF in one SQL function and boosted by environment match. An LLM then judges the top few results and explains why.
 
----
+## 6. Using LLMs safely
 
-## 6. AI-assisted problem solving
+- **RAG** (Lewis et al., 2020): the model answers from retrieved documents, not from its own memory. Needed here because the model knows nothing about Viamedici's cases.
+- **Citations:** every claim should point to the case or solution it came from, and cited IDs are checked against what was actually retrieved.
+- **Hallucinations:** a made-up solution wastes the engineer's time and trust. Ways to reduce this: structured output, checked citations, allowing "nothing relevant found" as an answer, and confidence levels.
+- **Human in the loop:** the brief says the engineer stays responsible, so AI output should be suggestions the engineer accepts, edits or rejects.
 
-- **Retrieval-Augmented Generation (RAG)** (Lewis et al., 2020): ground LLM output in retrieved documents instead of model memory. Essential here, because the model knows nothing about Viamedici's internal cases.
-- **Grounding & citations:** every AI claim should point to the case/solution it came from, so the engineer can verify it in one click. Citations must be *validated*: an ID the model cites must exist in the retrieved set.
-- **Hallucination risk:** an invented "solution" in an enterprise context costs trust and engineer time. Mitigations: structured outputs, citation validation, explicit "no relevant history found" outcome, confidence levels.
-- **Human-in-the-loop:** the brief says *"the engineer remains responsible."* AI output must be **suggestions** that a human accepts, edits or rejects, and those decisions are useful feedback data.
+**Takeaway:** agents never change cases or solutions directly. They write suggestions with a reason, confidence and sources. A person approves them, and accept/reject decisions are saved as feedback.
 
-**→ Implication:** agents never write directly to cases or solutions. They write **suggestions** (with rationale, confidence, citations). Humans approve. Accept/reject decisions are stored and used to evaluate and improve.
+## 7. Agent design
 
----
+- **ReAct** (Yao et al., 2022): the model alternates between thinking and calling tools, so it can search, look at the results and search again differently, much like an engineer does.
+- **Tool calling:** the model calls defined functions (search, get case, get release notes) instead of guessing.
+- **Workflows vs agents** (Anthropic, *Building Effective Agents*, 2024): use fixed workflows where the steps are known and only let the model decide where the path really varies. More agents means more cost, latency and things that can go wrong.
+- **LangGraph:** the process is a graph of steps with shared state, which fits a business process with approval steps.
 
-## 7. Agentic AI / agent architectures
-
-- **ReAct** (Yao et al., 2022): interleaving reasoning and tool calls lets a model search, look at results, and decide to search again differently. That is how an engineer actually searches.
-- **Tool use / function calling:** the model calls typed functions (search, fetch case, fetch release notes) instead of guessing.
-- **Workflows vs agents** (Anthropic, *Building Effective Agents*, 2024): use predictable workflows (prompt chaining, routing, orchestrator-workers, evaluator-optimizer) where the steps are known, and give autonomy only where the path genuinely varies. Multi-agent systems add cost, latency and failure modes, so the agency should *earn its place*.
-- **Stateful graphs** (e.g. LangGraph): model the process as a graph of nodes with shared state, checkpoints and **interrupts** for human approval, which is a good fit for an enterprise process with sign-off steps.
-
-**Where autonomy pays off in this problem:**
-
-| Step | Workflow or agent? | Why |
+| Step | Fixed step or agent | Why |
 |---|---|---|
-| Structure the incoming case | Workflow (single structured LLM call) | Fixed input → fixed schema |
-| Find similar history | **Agent** (ReAct loop with tools) | Needs query reformulation, filter changes, following case → solution → case links |
-| Judge applicability | Workflow (evaluator) | Compare environment vs solution conditions + release notes |
-| Plan the investigation | **Agent** | Depends on what was found and on the engineer's findings so far; re-plans each step |
-| Capture knowledge | Workflow + human interrupt | Decide create / merge / link, then wait for approval |
+| Structure the new case | Fixed (one structured LLM call) | Same input and output every time |
+| Find similar history | Agent with tools | May need to rephrase the query, change filters, follow links between cases and solutions |
+| Check applicability | Fixed | Compare environment with solution conditions and release notes |
+| Plan next steps | Fixed, re-run after each finding | Depends on what was found and what the engineer has logged |
+| Capture knowledge | Fixed, then wait for approval | Decide create, update or link, then a person approves |
 
-**→ Implication:** a **graph-orchestrated workflow with agentic nodes**, not a free-form swarm of chatting agents. Easy to explain, debug, evaluate and defend.
+**Takeaway:** one graph workflow with a single tool-using agent where it's needed, not a group of agents talking to each other. It's easier to explain, debug and test.
 
----
+## 8. The domain: Viamedici EPIM
 
-## 8. Domain research: what Viamedici's customers run into
+EPIM is a PIM/MDM platform. Companies use it to model, enrich, classify and publish product data to different channels. The main parts:
 
-Viamedici's EPIM is an enterprise **PIM / MDM** platform: companies use it to model, enrich, classify and publish product information to many channels. Typical moving parts:
+- product data model: product types, attributes, variants, inheritance
+- imports from ERP (e.g. SAP), suppliers, spreadsheets
+- classification standards (ETIM, ECLASS)
+- exchange formats (BMEcat, XML, CSV, JSON)
+- channels: webshops (Shopware, Adobe Commerce, SAP Commerce), marketplaces, print
+- media and DAM
+- workflows for enrichment, approval and release
+- multiple languages
+- integrations, APIs, scheduled jobs, permissions
 
-- **Product data modelling:** product types, attributes, variants, inheritance
-- **Imports:** from ERP systems (e.g. SAP), supplier data, spreadsheets
-- **Classification standards:** ETIM, ECLASS
-- **Exchange formats:** BMEcat, XML/CSV/JSON exports
-- **Channel syndication:** webshops (e.g. Shopware, Magento/Adobe Commerce, SAP Commerce), marketplaces, print catalogues
-- **Media / DAM:** images, documents, renditions
-- **Workflows:** enrichment, approval, release
-- **Multi-language:** translations, locale fallbacks
-- **Integrations and APIs**, scheduled jobs, permissions
+Common problem types, which I used to build the sample dataset:
 
-**Typical problem classes** (used to design a realistic dataset):
-
-| Class | Example symptom | Typical cause |
+| Type | Example | Usual cause |
 |---|---|---|
-| Export / channel | Products missing or outdated on webshop | Export filter, mapping change after upgrade, failed scheduled job, channel API change |
-| Import | ERP import partially fails | Changed source field, unit mismatch, encoding, duplicate keys |
-| Classification | ETIM features missing after class update | Version change of classification standard, unmapped features |
-| Data model / inheritance | Variant shows parent's old value | Inheritance override, cache |
-| Media | Images not shown in channel | Rendition config, file path, CDN cache |
-| Localisation | Wrong language on export | Locale fallback chain configuration |
-| Workflow | Products stuck in approval | Role/permission change, workflow condition |
-| Performance | Export takes hours after data growth | Missing index, unbatched job, full instead of delta export |
-| Upgrade regression | Behaviour changed after update | Breaking change in release, deprecated config |
+| Export / channel | Products missing or outdated in webshop | Export filter, mapping changed by upgrade, failed job, channel API change |
+| Import | ERP import partly fails | Changed source field, units, encoding, duplicate keys |
+| Classification | ETIM features missing after update | New standard version, unmapped features |
+| Data model | Variant shows old parent value | Inheritance override, cache |
+| Media | Images missing in channel | Rendition config, file path, CDN cache |
+| Language | Wrong language in export | Locale fallback settings |
+| Workflow | Products stuck in approval | Role or permission change, workflow condition |
+| Performance | Export takes hours | Missing index, no batching, full export instead of delta |
+| Upgrade | Behaviour changed after update | Breaking change or deprecated setting |
 
-**→ Implication:** the synthetic dataset models **customers, environments (version + modules + integrations), releases with breaking-change notes**, and cases across these classes. It deliberately includes **version-specific fixes**, **near-duplicates**, **red herrings** and **recurring clusters**, so the AI's judgement can be shown and measured.
+**Takeaway:** the dataset has customers, environments (version, modules, integrations), releases with breaking changes, and cases across these types. It includes fixes that only work on certain versions, near duplicates, misleading matches and groups of recurring cases, so the agents' judgement can actually be tested.
 
----
+## 9. Design decisions
 
-## 9. Summary: research → design decisions
-
-| # | Finding | Design decision |
+| # | Finding | Decision |
 |---|---|---|
-| D1 | Ticket tools are ticket-centric; knowledge is a by-product | Separate **Case** and **Solution** entities; the solution is the reusable asset |
-| D2 | Outcome evidence is missing in most tools | `case_solutions` relation with **outcome**; solutions carry a **track record** |
-| D3 | Similarity ignores the environment | Structured **environment** (version, modules, integrations) + **applicability check** |
-| D4 | The investigation path is lost | **Investigation steps** with confirmed / ruled-out results |
-| D5 | KCS: search early, reuse is review, standard structure | Auto-analysis on case creation; Issue/Environment/Cause/Resolution template; KCS lifecycle |
-| D6 | CBR: Retrieve → Reuse → Revise → Retain | The platform's end-to-end flow follows CBR |
-| D7 | Support text mixes language and exact identifiers | **Hybrid search** (FTS + vectors + trigram + structured boosts, RRF) + LLM re-rank |
-| D8 | Hallucinations destroy trust | Grounded, **cited**, validated, structured outputs; "no match" is an allowed answer |
-| D9 | Engineer stays responsible | Agents write **suggestions** only; humans approve; feedback is recorded |
-| D10 | Agency must earn its place | **Graph workflow with agentic nodes** only where the path varies |
-| D11 | Recurring incidents point at product problems | Root-cause taxonomy; stretch: **Problem Management agent** |
+| D1 | Ticket tools treat knowledge as a side product | Separate Case and Solution tables; the solution is what gets reused |
+| D2 | Most tools don't track outcomes | `case_solutions` with an outcome; each solution has a track record |
+| D3 | Similarity ignores the environment | Structured environment data and an applicability check |
+| D4 | The investigation gets lost | Investigation steps with confirmed / ruled out results |
+| D5 | KCS: search early, reuse is review, fixed structure | Analysis on case creation, Issue/Environment/Cause/Resolution, KCS statuses |
+| D6 | Case-based reasoning: retrieve, reuse, revise, retain | The main flow follows these steps |
+| D7 | Support text mixes sentences and exact codes | Hybrid search (FTS, vectors, trigram, boosts, RRF), then LLM judging |
+| D8 | Made-up answers break trust | Sources on every suggestion, checked citations, "no match" allowed |
+| D9 | The engineer is responsible | Agents only write suggestions; people approve; feedback saved |
+| D10 | Only use an agent where the path varies | Graph workflow with one tool-using agent for retrieval |
+| D11 | Repeated incidents point to product problems | Root cause list and a problem detection agent |
 
 ## References
 
-- Consortium for Service Innovation: *KCS v6 Practices Guide*
-- AXELOS: *ITIL 4: Incident, Problem and Knowledge Management practices*
+- Consortium for Service Innovation, *KCS v6 Practices Guide*
+- AXELOS, *ITIL 4: Incident, Problem and Knowledge Management practices*
 - Aamodt, A. & Plaza, E. (1994). *Case-Based Reasoning: Foundational Issues, Methodological Variations, and System Approaches.* AI Communications.
 - Cormack, G., Clarke, C. & Buettcher, S. (2009). *Reciprocal Rank Fusion outperforms Condorcet and individual rank learning methods.* SIGIR.
 - Lewis, P. et al. (2020). *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.* NeurIPS.
 - Yao, S. et al. (2022). *ReAct: Synergizing Reasoning and Acting in Language Models.*
 - Anthropic (2024). *Building Effective Agents.*
-- Product documentation: ServiceNow, Jira Service Management, Zendesk, Salesforce Service Cloud; Directus; pgvector; LangGraph.
+- Product documentation: ServiceNow, Jira Service Management, Zendesk, Salesforce Service Cloud, Directus, pgvector, LangGraph.
