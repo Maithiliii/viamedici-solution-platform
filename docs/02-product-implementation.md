@@ -678,7 +678,7 @@ All companies and people in the data are made up.
 
 | Risk | Effect | What I did |
 |---|---|---|
-| Free tier limits or overload on demo day | Demo fails | Model fallback chain, a recorded demo as backup |
+| Free tier limits or overload on demo day | Demo fails | Model fallback chain across several Gemini models |
 | Sample data feels fake | Less convincing | Based on domain research, with traps and real-looking investigation paths |
 | Learning the Directus extension SDK | UI late | Kept the workspace to a few screens |
 | LLM output not consistent | Broken UI or wrong claims | Schemas, retries, citation check, "no match" allowed |
