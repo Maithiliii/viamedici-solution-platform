@@ -1,0 +1,270 @@
+# Synthetic reference data for the Solution Enablement Platform.
+# All customers, people and product versions are fictional. The product
+# structure mirrors a typical enterprise PIM/MDM platform (EPIM-like).
+
+users:
+  - key: lena
+    first_name: Lena
+    last_name: Hoffmann
+    email: lena.hoffmann@sep.example.com
+    role: Solution Architect
+  - key: jonas
+    first_name: Jonas
+    last_name: Weber
+    email: jonas.weber@sep.example.com
+    role: Support Engineer
+  - key: priya
+    first_name: Priya
+    last_name: Nair
+    email: priya.nair@sep.example.com
+    role: Support Engineer
+  - key: marco
+    first_name: Marco
+    last_name: Rossi
+    email: marco.rossi@sep.example.com
+    role: Support Engineer
+  - key: sophie
+    first_name: Sophie
+    last_name: Klein
+    email: sophie.klein@sep.example.com
+    role: Support Engineer
+
+modules:
+  - {code: PDM, name: Product Data Model, description: "Product types, attributes, variants, inheritance and attribute groups."}
+  - {code: IMPORT, name: Import & Onboarding, description: "Import profiles for ERP, supplier and spreadsheet data; mapping, validation and error handling."}
+  - {code: EXPORT, name: Export & Channel Syndication, description: "Export profiles and the channel engine that publishes product data to webshops, marketplaces and partners."}
+  - {code: CLASS, name: Classification, description: "ETIM and ECLASS classification, feature mapping and classification upgrades."}
+  - {code: MEDIA, name: Media & DAM, description: "Assets, renditions, DAM connectors and media delivery to channels."}
+  - {code: WORKFLOW, name: Workflow & Approval, description: "Enrichment and approval workflows, conditions, task assignment and automatic release."}
+  - {code: I18N, name: Localization & Translation, description: "Locales, fallback chains, translation export/import (XLIFF)."}
+  - {code: SEARCH, name: Search & Indexing, description: "Search index (Solr up to 8.x, OpenSearch from 9.0) and indexing jobs."}
+  - {code: API, name: REST API & Connectors, description: "Public REST API, authentication, rate limiting and connector framework."}
+  - {code: PRINT, name: Print & Catalog Publishing, description: "Catalog and data sheet generation via the InDesign publishing connector."}
+  - {code: AUTH, name: Users, Roles & Permissions, description: "Users, roles, attribute group rights and data permissions."}
+  - {code: JOBS, name: Scheduler & Background Jobs, description: "Job scheduler, background workers and job monitoring."}
+
+integrations:
+  - {code: SAP_S4, name: SAP S/4HANA, type: erp}
+  - {code: SAP_ECC, name: SAP ECC 6.0, type: erp}
+  - {code: D365, name: Microsoft Dynamics 365, type: erp}
+  - {code: SHOPWARE6, name: Shopware 6, type: webshop}
+  - {code: ADOBE_COMMERCE, name: Adobe Commerce (Magento 2), type: webshop}
+  - {code: SAP_COMMERCE, name: SAP Commerce Cloud, type: webshop}
+  - {code: SHOPIFY, name: Shopify Plus, type: webshop}
+  - {code: AMAZON_VC, name: Amazon Vendor Central, type: marketplace}
+  - {code: MIRAKL, name: Mirakl Marketplace, type: marketplace}
+  - {code: CELUM, name: CELUM DAM, type: dam}
+  - {code: INDESIGN, name: InDesign Publishing Connector, type: print}
+  - {code: XTM, name: XTM Cloud, type: translation}
+  - {code: BMECAT, name: BMEcat 2005 Exchange, type: data_exchange}
+
+releases:
+  - version: "8.0"
+    date: 2024-02-12
+    summary: Major release with new attribute inheritance model and job monitor.
+    changes:
+      - {module: PDM, type: feature, title: New attribute inheritance model for variants}
+      - {module: JOBS, type: feature, title: Job monitor with retry for failed background jobs}
+  - version: "8.1"
+    date: 2024-06-10
+    summary: Delta export for webshop connectors and ETIM 9 support.
+    changes:
+      - {module: EXPORT, type: feature, title: Delta export for Shopware and Adobe Commerce connectors, description: "Delta exports only send products whose change timestamp is newer than the last successful run."}
+      - {module: CLASS, type: feature, title: ETIM 9 support}
+      - {module: IMPORT, type: fix, title: Faster SAP IDoc parsing}
+  - version: "8.2"
+    date: 2024-10-14
+    summary: Channel-specific media renditions; Basic Auth deprecation notice.
+    changes:
+      - {module: MEDIA, type: feature, title: Rendition presets per channel, description: "Rendition presets are now defined per channel. Presets referenced by export profiles must exist in the channel's preset list."}
+      - {module: API, type: deprecation, title: Basic authentication for the REST API is deprecated, description: "Basic authentication will be removed in 9.0. Integrations must move to OAuth2 client credentials."}
+      - {module: WORKFLOW, type: fix, title: Faster task list for large workflows}
+  - version: "9.0"
+    date: 2025-03-17
+    summary: "Major release: Channel Engine 2, OAuth2-only API, OpenSearch, ETIM 10."
+    changes:
+      - {module: EXPORT, type: breaking, title: Channel Engine 2 replaces the legacy export framework, description: "Legacy export profiles are migrated automatically on upgrade. Channel filter expressions written in the legacy filter syntax cannot be converted and are migrated as EMPTY filters (the profile then exports nothing or falls back to the channel default). Run 'epim-cli channel migrate-profiles --validate' after the upgrade."}
+      - {module: EXPORT, type: fix, title: Change detection rewritten, description: "Changes to inherited attribute values now correctly mark variants as changed, so delta exports include them. The workaround of scheduling periodic full exports is no longer needed."}
+      - {module: API, type: breaking, title: REST API requires OAuth2 client credentials, description: "Basic authentication has been removed. Clients receive HTTP 401 with error code API-AUTH-410 until they are switched to OAuth2."}
+      - {module: SEARCH, type: breaking, title: Search engine moved from Apache Solr to OpenSearch 2, description: "Solr cores are no longer used. Index health is monitored via the OpenSearch cluster."}
+      - {module: MEDIA, type: feature, title: DAM connectors use OAuth2 with refresh tokens}
+      - {module: CLASS, type: feature, title: ETIM 10 support}
+  - version: "9.1"
+    date: 2025-09-08
+    summary: New workflow expression syntax and per-channel locale fallback.
+    changes:
+      - {module: WORKFLOW, type: breaking, title: New template syntax for workflow conditions, description: "Workflow condition expressions use the new syntax {{attribute.code}}. The legacy syntax ${attr:code} is deprecated and evaluated as FALSE (a warning is written to the workflow log)."}
+      - {module: I18N, type: feature, title: Per-channel locale fallback chains, description: "Fallback chains are now configured per channel. Upgraded systems receive the global chain as default for every channel."}
+      - {module: IMPORT, type: fix, title: Better error messages for unit conversion}
+  - version: "9.2"
+    date: 2026-03-09
+    summary: API rate limiting, parallel export workers, ECLASS 14.
+    changes:
+      - {module: API, type: feature, title: Default API rate limiting, description: "All API clients are limited to 600 requests per minute by default. Clients exceeding the limit receive HTTP 429 with a Retry-After header. Limits can be raised per client."}
+      - {module: EXPORT, type: feature, title: Parallel export workers for Channel Engine 2, description: "Exports are split into batches processed by up to 8 parallel workers (default 4)."}
+      - {module: CLASS, type: feature, title: ECLASS 14 support}
+      - {module: MEDIA, type: fix, title: Faster rendition generation}
+
+root_causes:
+  - {code: PRODUCT_BUG_CHANGE_DETECTION, category: product_bug, name: Change detection ignores inherited value changes}
+  - {code: UPGRADE_EXPORT_PROFILE_MIGRATION, category: upgrade, name: Legacy export profile not fully migrated to Channel Engine 2}
+  - {code: CFG_EXPORT_FILTER, category: configuration, name: Export filter excludes products}
+  - {code: INT_TOKEN_EXPIRED, category: integration, name: Integration credentials or token expired / rotated}
+  - {code: DATA_UOM_MAPPING, category: data, name: Unit of measure not mapped}
+  - {code: CFG_IMPORT_ENCODING, category: configuration, name: Import file encoding mismatch}
+  - {code: DATA_KEY_NORMALIZATION, category: data, name: Inconsistent product keys in source data}
+  - {code: UPGRADE_CLASSIFICATION_VERSION, category: upgrade, name: Classification version change without feature remapping}
+  - {code: CFG_EXPORT_STANDARD_VERSION, category: configuration, name: Export profile references wrong standard version}
+  - {code: USER_LOCAL_OVERRIDE, category: user_error, name: Unintended local override breaks inheritance}
+  - {code: CFG_MEDIA_RENDITION, category: configuration, name: Missing or changed media rendition preset}
+  - {code: CFG_LOCALE_FALLBACK, category: configuration, name: Locale fallback chain misconfigured}
+  - {code: CFG_ATTRIBUTE_TRANSLATABLE, category: configuration, name: Attribute not flagged as translatable}
+  - {code: CFG_WORKFLOW_ROLE, category: configuration, name: Workflow step assigned to missing or renamed role}
+  - {code: UPGRADE_WORKFLOW_SYNTAX, category: upgrade, name: Deprecated workflow expression syntax}
+  - {code: INFRA_INDEX_READONLY, category: infrastructure, name: Search index switched to read-only (disk watermark)}
+  - {code: INFRA_SOLR_OUT_OF_SYNC, category: infrastructure, name: Solr index out of sync}
+  - {code: PERF_FULL_EXPORT, category: performance, name: Full export instead of delta export on large assortment}
+  - {code: UPGRADE_API_AUTH, category: upgrade, name: API authentication method removed by upgrade}
+  - {code: INT_RATE_LIMIT, category: integration, name: API rate limit exceeded}
+  - {code: CFG_PRINT_SCOPE, category: configuration, name: Print template uses wrong data scope}
+  - {code: CFG_PERMISSION_GROUPS, category: configuration, name: Attribute group permissions missing for role}
+  - {code: INFRA_SCHEDULER_TIMEZONE, category: infrastructure, name: Scheduler timezone / daylight saving time}
+  - {code: INT_MARKETPLACE_TEMPLATE, category: integration, name: Marketplace category template changed}
+  - {code: CFG_IMPORT_LOCALE, category: configuration, name: Import number format locale mismatch}
+  - {code: INFRA_PROXY_AUTH_HEADER, category: infrastructure, name: Reverse proxy strips Authorization header}
+
+# Each customer runs a PROD environment. 'version' is the CURRENT version;
+# every case records the version that was installed when it was reported.
+customers:
+  - key: kessler
+    name: Kessler Elektrotechnik GmbH
+    industry: Electrical wholesale
+    tier: strategic
+    region: DACH
+    version: "9.1"
+    deployment: on_prem
+    database: Oracle 19c
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, WORKFLOW, I18N, SEARCH, API, JOBS, AUTH]
+    integrations: [{code: SAP_S4, version: "2023 FPS02"}, {code: SHOPWARE6, version: "6.6"}, {code: BMECAT}, {code: CELUM, version: "6.10"}]
+    config_notes: "Upgraded 8.2 -> 9.0 in May 2025 and 9.1 in October 2025. ~420k products, 1.9M variants. Nightly delta export to Shopware, auto-release workflow for ERP-driven updates."
+  - key: nordbau
+    name: NordBau Baustoffe AG
+    industry: Building materials
+    tier: premium
+    region: DACH
+    version: "9.2"
+    deployment: on_prem
+    database: PostgreSQL 15
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, WORKFLOW, PRINT, SEARCH, JOBS, AUTH]
+    integrations: [{code: SAP_ECC, version: "EHP8"}, {code: ADOBE_COMMERCE, version: "2.4.7"}, {code: INDESIGN, version: "2024"}]
+    config_notes: "Print catalogue twice a year. Upgraded to 9.0 in June 2025 and 9.2 in April 2026."
+  - key: alpenrad
+    name: Alpenrad Sport GmbH
+    industry: Sporting goods
+    tier: standard
+    region: DACH
+    version: "9.1"
+    deployment: cloud
+    database: PostgreSQL 15
+    modules: [PDM, IMPORT, EXPORT, MEDIA, I18N, API, JOBS]
+    integrations: [{code: D365}, {code: SHOPIFY}, {code: AMAZON_VC}]
+    config_notes: "Seasonal assortment changes. Upgraded from 8.2 to 9.1 in November 2025."
+  - key: brightline
+    name: Brightline Lighting B.V.
+    industry: Lighting
+    tier: premium
+    region: Benelux
+    version: "9.2"
+    deployment: cloud
+    database: PostgreSQL 16
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, I18N, API, JOBS, SEARCH]
+    integrations: [{code: SAP_S4}, {code: SHOPWARE6, version: "6.6"}, {code: MIRAKL}, {code: XTM}]
+    config_notes: "11 locales. Marketplace sync to Mirakl every 15 minutes."
+  - key: hanse
+    name: Hanse Sanitär GmbH
+    industry: Sanitary & plumbing
+    tier: premium
+    region: DACH
+    version: "9.1"
+    deployment: on_prem
+    database: Microsoft SQL Server 2019
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, PRINT, WORKFLOW, SEARCH, JOBS, AUTH]
+    integrations: [{code: SAP_ECC}, {code: SAP_COMMERCE}, {code: BMECAT}, {code: INDESIGN}]
+    config_notes: "Stayed on 8.2 until January 2026, then upgraded directly to 9.1."
+  - key: medisan
+    name: Medisan Medical Supplies AG
+    industry: Medical supplies
+    tier: strategic
+    region: Switzerland
+    version: "9.1"
+    deployment: on_prem
+    database: Oracle 19c
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, WORKFLOW, I18N, API, JOBS, AUTH, SEARCH]
+    integrations: [{code: SAP_S4}, {code: SAP_COMMERCE}, {code: CELUM}, {code: XTM}]
+    config_notes: "Regulated data (MDR). Four-eyes approval workflow. Corporate reverse proxy in front of all APIs."
+  - key: technoparts
+    name: TechnoParts Industrial GmbH
+    industry: Industrial automation
+    tier: premium
+    region: DACH
+    version: "9.1"
+    deployment: on_prem
+    database: PostgreSQL 15
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, API, JOBS, SEARCH]
+    integrations: [{code: D365}, {code: ADOBE_COMMERCE}, {code: BMECAT}]
+    config_notes: "Heavy ECLASS usage. BMEcat catalogs for 30+ distributors."
+  - key: vinea
+    name: Vinea Home & Living GmbH
+    industry: Home & living retail
+    tier: standard
+    region: DACH
+    version: "9.2"
+    deployment: cloud
+    database: PostgreSQL 16
+    modules: [PDM, IMPORT, EXPORT, MEDIA, I18N, API, JOBS]
+    integrations: [{code: SHOPIFY}, {code: AMAZON_VC}, {code: CELUM}]
+    config_notes: "Image-heavy assortment (~25 images per product)."
+  - key: rheinwerk
+    name: Rheinwerk Tools GmbH
+    industry: Tools & hardware
+    tier: standard
+    region: DACH
+    version: "9.1"
+    deployment: on_prem
+    database: PostgreSQL 14
+    modules: [PDM, IMPORT, EXPORT, MEDIA, WORKFLOW, SEARCH, JOBS, API]
+    integrations: [{code: SAP_ECC}, {code: SHOPWARE6, version: "6.5"}, {code: AMAZON_VC}]
+    config_notes: "Upgraded from 8.0 to 9.0 in August 2025 and from 9.0 to 9.1 on 24 October 2026. ERP-driven products are released automatically by a workflow when complete; Shopware export only takes released products."
+  - key: polar
+    name: Polar Kitchen Appliances Oy
+    industry: Home appliances
+    tier: premium
+    region: Nordics
+    version: "9.2"
+    deployment: cloud
+    database: PostgreSQL 16
+    modules: [PDM, IMPORT, EXPORT, CLASS, MEDIA, I18N, API, JOBS]
+    integrations: [{code: SAP_S4}, {code: MIRAKL}, {code: XTM}]
+    config_notes: "Large media library (manuals, energy labels). Upgraded to 9.2 in May 2026."
+  - key: baltic
+    name: Baltic Fasteners SIA
+    industry: Fasteners
+    tier: standard
+    region: Baltics
+    version: "9.1"
+    deployment: cloud
+    database: PostgreSQL 15
+    modules: [PDM, IMPORT, EXPORT, CLASS, JOBS]
+    integrations: [{code: D365}, {code: BMECAT}, {code: SHOPWARE6, version: "6.6"}]
+    config_notes: "ERP exports with Latvian/German number formats."
+  - key: lumen
+    name: Lumen Office Supplies Ltd
+    industry: Office supplies
+    tier: standard
+    region: UK
+    version: "9.2"
+    deployment: cloud
+    database: PostgreSQL 16
+    modules: [PDM, IMPORT, EXPORT, PRINT, WORKFLOW, AUTH, JOBS]
+    integrations: [{code: SAP_S4}, {code: ADOBE_COMMERCE}, {code: INDESIGN}]
+    config_notes: "Reorganised editorial team in 2025 (new roles)."

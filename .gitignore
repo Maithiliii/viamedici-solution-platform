@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Assessment brief (confidential, not for the public repo)
+Project_Viamedici_MonteiroBrothers.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / Directus extensions
+node_modules/
+dist/
+# the built Directus extension is committed so the stack runs without Node
+!directus/extensions/*/dist/
+
+# Docker volumes / local data
+data/postgres/
+data/uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

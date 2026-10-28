@@ -1,0 +1,92 @@
+# Cases WITHOUT a known solution (still open).
+# Hidden pattern (not stated anywhere in the data): since 9.2, Channel Engine 2
+# exports with parallel workers stall on the last batch when batches contain many
+# media assets. Workaround: workers = 1. The Problem Detection agent should
+# discover this cluster and propose an ITIL Problem record.
+
+cases:
+  - customer: polar
+    version: "9.2"
+    date: 2026-06-30
+    severity: S2
+    channel: email
+    engineer: priya
+    status: investigating
+    title: Mirakl export hangs at 99%
+    report: |
+      Our Mirakl export hangs at 99% every second night. The job stays "running" until we cancel it. After a
+      restart it sometimes finishes. Started after the 9.2 upgrade.
+    goal: Export finishes every night.
+    symptoms: Export job stuck at 99%, stays running.
+    errors: "ChannelEngine: batch 212/213 waiting for worker (timeout not reached)"
+    module: EXPORT
+    steps:
+      - [Restarted export job, "Finished after restart", inconclusive]
+      - [Checked Mirakl API errors, "No errors / no 429", ruled_out]
+  - customer: vinea
+    version: "9.2"
+    date: 2026-07-21
+    severity: S2
+    channel: portal
+    engineer: marco
+    status: investigating
+    title: Shopify export never finishes
+    report: |
+      The nightly Shopify export does not finish, the progress bar stays at 99%. We have a lot of images per
+      product. Happens 2-3 times per week since the update in April.
+    goal: Reliable nightly export.
+    symptoms: Export stays at 99%.
+    errors: "ChannelEngine: worker-3 no heartbeat for 1800s"
+    module: EXPORT
+    steps:
+      - [Checked database locks, "No blocking locks", ruled_out]
+      - [Checked server memory, "Normal", ruled_out]
+  - customer: nordbau
+    version: "9.2"
+    date: 2026-08-25
+    severity: S3
+    channel: email
+    engineer: sophie
+    status: waiting_customer
+    title: Export job shows "running" for 6 hours
+    report: |
+      The Magento export shows "running" since 6 hours, last batch not processed. Can we just kill it?
+    goal: Export completed.
+    symptoms: Export job hangs on last batch.
+    errors: "batch 88/89 waiting for worker"
+    module: EXPORT
+    steps:
+      - [Asked customer for job log and worker settings, "Waiting for reply", inconclusive]
+  - customer: lumen
+    version: "9.2"
+    date: 2026-09-15
+    severity: S3
+    channel: portal
+    engineer: jonas
+    status: investigating
+    title: Magento export stuck at last batch
+    report: |
+      Every few days our export to Magento gets stuck at the last batch. Setting the job to 1 worker seems to
+      help but then it is slow.
+    goal: Fast and reliable export.
+    symptoms: Stuck at last batch; single worker works.
+    errors: ""
+    module: EXPORT
+    steps:
+      - [Reduced parallel workers to 1, "No hang for 5 days, but runtime doubled", confirmed]
+  - customer: brightline
+    version: "9.2"
+    date: 2026-10-06
+    severity: S2
+    channel: email
+    engineer: priya
+    status: investigating
+    title: Channel engine queue stuck with media-heavy products
+    report: |
+      Our Shopware export is stuck again. It happens mostly when many products with new pictures are exported.
+    goal: Export not blocked.
+    symptoms: Export queue stuck, correlates with media changes.
+    errors: "worker-2 no heartbeat; batch contains 4.812 media references"
+    module: EXPORT
+    steps:
+      - [Checked media renditions, "All renditions exist", ruled_out]

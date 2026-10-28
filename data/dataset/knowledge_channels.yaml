@@ -1,0 +1,807 @@
+# Solutions + the historical cases that produced / reused them.
+# Domain: export & channel syndication, media, localisation.
+# Each case: customer, version (installed at the time), date, outcome of the
+# solution on this case. 'other_solutions' records additional attempts
+# (e.g. a solution that was tried and FAILED). 'holdout: true' cases are used
+# by the evaluation harness as unseen queries.
+
+solutions:
+
+  - number: SOL-001
+    title: Delta export misses variants after inherited attribute change
+    issue: |
+      Variants (colours, sizes) show old values in the webshop although the parent product was changed
+      in the PIM. Changes made directly on the variant are exported correctly. A manual full export fixes
+      the webshop until the next parent change.
+    environment_conditions: |
+      EPIM 8.0 - 8.2 with delta export enabled (introduced in 8.1, also back-ported job option in 8.0).
+      Affects every webshop connector using delta exports (Shopware 6, Adobe Commerce, SAP Commerce).
+    cause: |
+      Product bug in the 8.x change detection: a change to an inherited value updates the parent's change
+      timestamp only. Variants inheriting the value keep their old timestamp and are skipped by the
+      delta export. Fixed in 9.0 (change detection rewritten).
+    resolution_steps: |
+      1. Confirm the pattern: compare the variant's "last changed" timestamp with the parent's.
+      2. Workaround: schedule a weekly full export for the affected channel (Export > Profiles > Schedule)
+         in addition to the nightly delta export.
+      3. For urgent cases trigger "Export > Run > Full export (selected products)" for the parent and its variants.
+      4. Recommend upgrading to 9.0+ where change detection propagates inherited changes.
+    verification_steps: |
+      Change an inherited attribute on a parent in QA, run the delta export and check that the variants
+      appear in the export log. With the workaround, verify after the next full export.
+    root_cause: PRODUCT_BUG_CHANGE_DETECTION
+    modules: [EXPORT, PDM]
+    integrations: [SHOPWARE6, ADOBE_COMMERCE, SAP_COMMERCE]
+    min_version: "8.0"
+    max_version: "8.2"
+    status: validated
+    cases:
+      - customer: kessler
+        version: "8.0"
+        date: 2024-04-16
+        severity: S2
+        channel: email
+        engineer: jonas
+        title: Shopware shows old colour names for variants
+        report: |
+          Hello support, we renamed the colour values of our cable reel series in the PIM last week
+          (e.g. "anthrazit" -> "anthracite grey"). The parent product is correct in the shop but all
+          variants still show the old names. When our colleague started a full export by hand it was
+          fixed, but today we changed the series description and again the variants are old. Please help.
+        goal: Variant data in the webshop must match the PIM after the nightly export.
+        symptoms: Variants keep old values in Shopware; parent correct; full export fixes it temporarily.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked Shopware connector log for errors, "No errors, delta export ran successfully at 02:00", ruled_out]
+          - [Compared change timestamps of parent and variants, "Parent changed 2024-04-15, variants still 2024-03-02", confirmed]
+          - [Checked whether the changed attribute is inherited, "Colour name is inherited from parent", confirmed]
+        outcome: resolved
+        resolution: Known change detection limitation in 8.x. Configured weekly full export as workaround; customer informed about fix in 9.0.
+      - customer: nordbau
+        version: "8.1"
+        date: 2024-09-03
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: Product variants not updated in Adobe Commerce
+        report: |
+          Since we use the new delta export, price group and delivery time changes we make on the master
+          product do not reach the variants in Magento. Only if somebody touches the variant itself it
+          gets exported. Is the delta export broken?
+        goal: Use delta export without losing variant updates.
+        symptoms: Delta export skips variants when master product data changes.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked export profile filter, "Filter includes all released products", ruled_out]
+          - [Ran delta export with debug log for one master product, "Variants not part of the changed-items set", confirmed]
+        outcome: resolved
+        resolution: Same change detection issue as known for 8.x. Added weekly full export; explained that 9.0 fixes it.
+      - customer: brightline
+        version: "8.1"
+        date: 2024-11-19
+        severity: S3
+        channel: email
+        engineer: marco
+        title: Lamp variants show outdated wattage in shop
+        report: |
+          We updated the wattage on 40 lamp families (on family level) for the new EU labels. In Shopware
+          the family pages are fine but each colour variant still shows the old wattage. The delta job
+          says success. We need this fixed before the label deadline.
+        goal: Correct energy data on every variant before the regulatory deadline.
+        symptoms: Delta export successful but variants not updated after family-level change.
+        errors: ""
+        module: EXPORT
+        holdout: true
+        steps:
+          - [Checked whether Shopware cache is stale, "Cache cleared, values still old", ruled_out]
+          - [Checked variant change timestamps, "Variants not touched since September", confirmed]
+        outcome: resolved
+        resolution: Triggered full export for affected families, scheduled weekly full export.
+      - customer: hanse
+        version: "8.2"
+        date: 2025-02-11
+        severity: S3
+        channel: portal
+        engineer: jonas
+        title: Variant data outdated in SAP Commerce after master change
+        report: |
+          Our master data team updated the material description for all shower fittings on the base article.
+          SAP Commerce still shows the old text for the colour/finish variants. Base article is correct.
+        goal: Variants in SAP Commerce reflect master changes.
+        symptoms: Inherited description not exported to variants.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked SAP Commerce import logs, "Only base articles were received", confirmed]
+          - [Verified change timestamps parent vs variant, "Only parent timestamp updated", confirmed]
+        outcome: resolved
+        resolution: Applied full export workaround; weekly full export scheduled until upgrade to 9.x.
+      - customer: rheinwerk
+        version: "8.0"
+        date: 2025-01-21
+        severity: S3
+        channel: phone
+        engineer: sophie
+        title: Webshop shows old product names on drill bit sizes
+        report: |
+          Customer called: after renaming the drill bit series the sizes (variants) in the webshop show the old
+          series name. A full export they ran last month fixed a similar thing.
+        goal: Correct names on all sizes.
+        symptoms: Variants keep old inherited name after parent rename.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked for failed export job, "Last delta export green", ruled_out]
+          - [Checked inheritance of the name attribute, "Name inherited from series", confirmed]
+        outcome: resolved
+        resolution: Full export for affected series; weekly full export configured.
+
+  - number: SOL-002
+    title: Products missing in channel after upgrade to 9.x (export profile filter not migrated)
+    issue: |
+      After the upgrade to EPIM 9.0 (or later) the webshop/marketplace receives far fewer products, or no
+      products at all, from an export profile that worked before the upgrade. The export job reports success.
+    environment_conditions: |
+      EPIM 9.0 and later, export profiles created before 9.0 (legacy export framework) that use channel
+      filter expressions. Any channel connector (Shopware 6, Adobe Commerce, SAP Commerce, marketplaces).
+    cause: |
+      Channel Engine 2 (introduced in 9.0) migrates legacy export profiles automatically, but filter
+      expressions written in the legacy syntax cannot be converted and are migrated as EMPTY filters.
+      Depending on the profile the result is "export nothing" or "export only channel default assortment".
+    resolution_steps: |
+      1. Run `epim-cli channel migrate-profiles --validate` and look for "FILTER_NOT_MIGRATED" warnings.
+      2. Open the profile in Export > Channel Engine > Profiles and re-create the filter in the new
+         expression editor (the old expression is shown read-only under "Legacy filter").
+      3. Run a preview ("Preview assortment") and compare the product count with the last pre-upgrade export.
+      4. Run a full export for the profile.
+      Note: a full export alone does NOT fix this, the filter itself is empty.
+    verification_steps: |
+      Preview assortment count matches the expected assortment; channel shows the products after the full export.
+    root_cause: UPGRADE_EXPORT_PROFILE_MIGRATION
+    modules: [EXPORT]
+    integrations: [SHOPWARE6, ADOBE_COMMERCE, SAP_COMMERCE]
+    min_version: "9.0"
+    max_version: null
+    status: validated
+    cases:
+      - customer: kessler
+        version: "9.0"
+        date: 2025-05-20
+        severity: S1
+        channel: phone
+        engineer: jonas
+        title: After upgrade only 12% of products in Shopware
+        report: |
+          URGENT: Since the upgrade to 9.0 on the weekend our Shopware shop only has about 50.000 instead of
+          420.000 products. The export job is green. Our sales team is getting customer complaints. Please call back.
+        goal: Full assortment back in the webshop immediately.
+        symptoms: Product count in shop dropped drastically after upgrade; export job successful.
+        errors: "Channel Engine: profile 'shopware-de' exported 51.204 items (previous run 418.877)"
+        module: EXPORT
+        steps:
+          - [Checked Shopware API errors, "No rejected items", ruled_out]
+          - [Ran migrate-profiles --validate, "FILTER_NOT_MIGRATED on profile shopware-de", confirmed]
+          - [Compared legacy filter vs new filter, "New filter empty, fallback to channel default category", confirmed]
+        outcome: resolved
+        resolution: Re-created the assortment filter in Channel Engine 2, previewed 418k items, ran full export.
+      - customer: nordbau
+        version: "9.0"
+        date: 2025-06-24
+        severity: S2
+        channel: portal
+        engineer: marco
+        title: Magento receives no products since update
+        report: |
+          Since our update to version 9 the Magento export does not send any products anymore. Log says
+          "0 items exported". Nothing was changed on our side apart from the update.
+        goal: Restore the Adobe Commerce export.
+        symptoms: Export job exports 0 items after upgrade.
+        errors: "ExportJob[magento-b2b] finished: 0 items exported"
+        module: EXPORT
+        steps:
+          - [Checked connector credentials, "Connection test OK", ruled_out]
+          - [Validated migrated profiles, "Filter expression empty after migration", confirmed]
+        outcome: resolved
+        resolution: Filter re-created in new expression editor; full export run.
+      - customer: rheinwerk
+        version: "9.0"
+        date: 2025-09-02
+        severity: S2
+        channel: email
+        engineer: sophie
+        title: Many products missing in Shopware after update to 9.0
+        report: |
+          Hello, after our update to 9.0 a big part of our tools are not in the webshop anymore. We know this
+          problem from last year (variants were old) and did a full export again but it did not help this time.
+          Products are released in PIM.
+        goal: All released products visible in the shop.
+        symptoms: Products missing in shop after upgrade; full export did not help.
+        errors: ""
+        module: EXPORT
+        holdout: true
+        other_solutions:
+          - {solution: SOL-001, outcome: failed, notes: "Full export workaround from 8.x tried first by customer and engineer; no effect on 9.0."}
+        steps:
+          - [Ran full export (known 8.x workaround), "No change in product count", ruled_out]
+          - [Ran migrate-profiles --validate, "FILTER_NOT_MIGRATED for profile shop-main", confirmed]
+        outcome: resolved
+        resolution: Old workaround SOL-001 not applicable on 9.0. Recreated filter in Channel Engine 2; full export.
+      - customer: medisan
+        version: "9.0"
+        date: 2025-06-10
+        severity: S2
+        channel: email
+        engineer: priya
+        title: SAP Commerce catalog incomplete after EPIM upgrade
+        report: |
+          After upgrading EPIM to 9.0 our SAP Commerce online catalog misses all products of the "Wound care"
+          and "Diagnostics" categories. The export reports success. Other categories are fine.
+        goal: Complete catalog in SAP Commerce.
+        symptoms: Whole categories missing after upgrade.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked category permissions for export user, "Permissions unchanged", ruled_out]
+          - [Validated profile migration, "Category filter with legacy OR-syntax migrated empty", confirmed]
+        outcome: resolved
+        resolution: Rebuilt category filter in Channel Engine 2, verified with preview, full export.
+
+  - number: SOL-003
+    title: Products not exported because they are not released (export filter on workflow status)
+    issue: |
+      New or recently changed products do not appear in the webshop/marketplace, while older products
+      are fine. The export runs without errors.
+    environment_conditions: |
+      All versions. Export profiles whose filter contains "status = released" (default for most channel
+      profiles) combined with an approval/release workflow.
+    cause: |
+      The export only includes products in workflow status "released". Products waiting in an approval
+      step, or whose automatic release did not happen, are excluded by design.
+    resolution_steps: |
+      1. Open an affected product and check its workflow status and current workflow step.
+      2. Check the export profile filter (Export > Profiles > Filter) for the status condition.
+      3. Release the products (or fix why they are not released: see workflow solutions) and re-run the export.
+      4. If the business wants unreleased products exported, adjust the filter consciously and document it.
+    verification_steps: Product shows status "released" and appears in the next export log.
+    root_cause: CFG_EXPORT_FILTER
+    modules: [EXPORT, WORKFLOW]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: alpenrad
+        version: "8.2"
+        date: 2025-03-04
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: New season products not visible in Shopify
+        report: |
+          We created 300 new bikes for the summer season in PIM but they don't show up in Shopify. Old
+          products are updated normally. The import from Dynamics worked.
+        goal: Launch the new season on time.
+        symptoms: Only new products missing in shop.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked Shopify connector log, "New products not in payload", confirmed]
+          - [Checked workflow status of new products, "All in step 'Marketing approval'", confirmed]
+        outcome: resolved
+        resolution: Products were waiting in marketing approval. Customer released them; next export published them.
+      - customer: technoparts
+        version: "9.1"
+        date: 2025-12-09
+        severity: S3
+        channel: email
+        engineer: marco
+        title: Changed products not reaching Adobe Commerce
+        report: |
+          Products we changed this week are not updated in our shop. It seems to affect only products that went
+          through the editorial team. Export logs are clean.
+        goal: Editorial changes visible in shop.
+        symptoms: Edited products not exported; export clean.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked delta detection, "Products marked changed", ruled_out]
+          - [Checked workflow status, "Products set back to 'in review' by editorial workflow", confirmed]
+        outcome: resolved
+        resolution: Editorial workflow resets status to 'in review'; export filter only takes released products. Products released.
+      - customer: lumen
+        version: "9.2"
+        date: 2026-05-12
+        severity: S4
+        channel: portal
+        engineer: sophie
+        title: Some products missing from Magento export
+        report: |
+          A handful of new notebooks and pens are missing in the Magento shop. The rest of the catalogue is fine.
+        goal: All products in the shop.
+        symptoms: Individual new products missing.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked workflow status, "Products in step 'Legal check'", confirmed]
+        outcome: resolved
+        resolution: Products not released (waiting in legal check). Explained export filter logic.
+
+  - number: SOL-004
+    title: Webshop not updated - connector credentials rotated in the shop system
+    issue: |
+      The PIM export reports success (or warnings) but the webshop does not show the changes. Shop admins
+      recently changed integration users, API keys or access tokens.
+    environment_conditions: All versions; webshop connectors with stored API credentials (Shopware 6 integrations, Adobe Commerce integration tokens).
+    cause: |
+      The shop-side integration credentials were rotated or the integration user was deleted. Depending on the
+      connector, the export either fails silently (warnings only) or only the cache invalidation call fails,
+      so the shop serves cached old data.
+    resolution_steps: |
+      1. Check the connector log for HTTP 401/403 responses or "cache invalidation failed" warnings.
+      2. Ask the shop admin for the current integration access key / token.
+      3. Update the credentials in Export > Channels > Connection and run "Test connection".
+      4. Re-run the export (delta is enough) and clear the shop cache once.
+    verification_steps: Connection test green; changes visible in the shop after the next export.
+    root_cause: INT_TOKEN_EXPIRED
+    modules: [EXPORT, API]
+    integrations: [SHOPWARE6, ADOBE_COMMERCE]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: kessler
+        version: "8.2"
+        date: 2025-01-14
+        severity: S3
+        channel: email
+        engineer: priya
+        title: Price changes not shown in webshop although export is green
+        report: |
+          We changed prices for 2.000 products yesterday. The PIM export is green but in Shopware the old
+          prices are shown. Our shop agency did some security changes last week, not sure if related.
+        goal: Current prices in the shop.
+        symptoms: Export successful, shop shows old data.
+        errors: "WARN ShopwareConnector: cache invalidation failed (401 Unauthorized)"
+        module: EXPORT
+        steps:
+          - [Checked connector log, "401 on cache invalidation endpoint", confirmed]
+          - [Asked agency about changes, "Integration access key rotated", confirmed]
+        outcome: resolved
+        resolution: Updated Shopware integration access key in connector; cache cleared.
+      - customer: brightline
+        version: "9.0"
+        date: 2025-07-08
+        severity: S2
+        channel: portal
+        engineer: jonas
+        title: Shopware shop stopped updating
+        report: |
+          Since Monday nothing we change in PIM appears in the shop. No error in the export overview,
+          only yellow warnings.
+        goal: Shop updates working again.
+        symptoms: No updates reach the shop; export warnings.
+        errors: "WARN Channel Engine: 3.412 items skipped - remote responded 401"
+        module: EXPORT
+        holdout: true
+        steps:
+          - [Checked channel connection test, "401 Unauthorized", confirmed]
+        outcome: resolved
+        resolution: Shopware integration had been deleted and recreated by the shop team; new credentials stored.
+      - customer: baltic
+        version: "9.1"
+        date: 2026-01-27
+        severity: S3
+        channel: email
+        engineer: marco
+        title: Shopware shows outdated stock texts
+        report: |
+          Delivery time texts in the shop are from last month. PIM says exported. We changed admin users in Shopware recently.
+        goal: Correct delivery texts.
+        symptoms: Old data in shop despite successful export.
+        errors: "cache invalidation failed: 403"
+        module: EXPORT
+        steps:
+          - [Checked export payload, "Payload contains new texts", ruled_out]
+          - [Checked integration user in Shopware, "User role reduced, cache permission missing", confirmed]
+        outcome: resolved
+        resolution: Integration role restored in Shopware; cache cleared.
+
+  - number: SOL-011
+    title: Images missing in channel after rendition preset change (404 on image URLs)
+    issue: |
+      Product images are missing or broken in the webshop/marketplace (placeholder or 404), while images
+      are visible in the PIM.
+    environment_conditions: EPIM 8.2 and later (channel-specific rendition presets).
+    cause: |
+      The export profile references a rendition preset (e.g. "web_large") that no longer exists for the
+      channel or was renamed. Assets are exported with URLs to renditions that were never generated.
+    resolution_steps: |
+      1. Open a broken image URL from the shop; a 404 on /renditions/<preset>/ confirms the pattern.
+      2. Check Media > Rendition presets for the channel; compare with the preset in the export profile.
+      3. Restore/rename the preset or update the profile, then run Jobs > "Regenerate renditions" for the channel.
+      4. Re-run the export for products with media.
+    verification_steps: Image URLs return 200; images visible in the channel.
+    root_cause: CFG_MEDIA_RENDITION
+    modules: [MEDIA, EXPORT]
+    integrations: []
+    min_version: "8.2"
+    max_version: null
+    status: validated
+    cases:
+      - customer: vinea
+        version: "8.2"
+        date: 2025-02-18
+        severity: S2
+        channel: email
+        engineer: sophie
+        title: Product images broken in Shopify
+        report: |
+          Since yesterday most product pictures in our Shopify store are broken (grey placeholder). In PIM the
+          images are there. Our media colleague cleaned up the image sizes last week.
+        goal: Images visible in shop again.
+        symptoms: Broken images in shop; images fine in PIM.
+        errors: "GET /renditions/web_large/... 404"
+        module: MEDIA
+        steps:
+          - [Opened image URL, "404 on rendition web_large", confirmed]
+          - [Checked rendition presets, "web_large renamed to web_xl during cleanup", confirmed]
+        outcome: resolved
+        resolution: Preset name restored, renditions regenerated, export re-run.
+      - customer: alpenrad
+        version: "9.1"
+        date: 2026-02-03
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: Amazon rejects images, Shopify shows none
+        report: |
+          New products have no images on Shopify and Amazon complains "image URL not reachable". Older products OK.
+        goal: Images for new products in all channels.
+        symptoms: New products without images in channels.
+        errors: "Amazon feed: MAIN image URL not reachable (404)"
+        module: MEDIA
+        steps:
+          - [Checked DAM connection, "Not using DAM, local media", ruled_out]
+          - [Checked renditions for new assets, "Preset 'marketplace_1500' missing for channel amazon", confirmed]
+        outcome: resolved
+        resolution: Preset added to the Amazon channel and regenerated.
+      - customer: nordbau
+        version: "9.2"
+        date: 2026-06-16
+        severity: S3
+        channel: email
+        engineer: jonas
+        title: Missing pictures in online shop after media reorganisation
+        report: |
+          After we reorganised our media presets, the Magento shop shows no pictures for about half of the products.
+        goal: Pictures back online.
+        symptoms: Half of the products without images.
+        errors: "404 Not Found /renditions/shop_detail/"
+        module: MEDIA
+        holdout: true
+        steps:
+          - [Checked rendition preset in export profile, "Profile still references shop_detail which was deleted", confirmed]
+        outcome: resolved
+        resolution: Profile updated to new preset; renditions regenerated.
+
+  - number: SOL-012
+    title: DAM images show placeholder - CELUM connector OAuth refresh token expired
+    issue: |
+      Assets linked from the DAM show placeholders or "asset unavailable" in the PIM and in exports. Locally
+      uploaded images are fine.
+    environment_conditions: EPIM 9.0 and later with CELUM DAM connector (OAuth2 since 9.0).
+    cause: |
+      Since 9.0 DAM connectors use OAuth2 with refresh tokens. When the refresh token expires (default 90 days
+      without rotation, or revoked after a DAM password policy change) the connector cannot fetch assets.
+    resolution_steps: |
+      1. Check Media > DAM connectors > CELUM: status "Authorization required" or log "invalid_grant".
+      2. Re-authorize the connector with a technical DAM user.
+      3. Enable "Rotate refresh token" so the token is renewed on every use.
+      4. Run Jobs > "Resync DAM assets".
+    verification_steps: Connector status green; placeholders replaced after resync.
+    root_cause: INT_TOKEN_EXPIRED
+    modules: [MEDIA]
+    integrations: [CELUM]
+    min_version: "9.0"
+    max_version: null
+    status: validated
+    cases:
+      - customer: medisan
+        version: "9.0"
+        date: 2025-08-26
+        severity: S2
+        channel: email
+        engineer: marco
+        title: All CELUM images replaced by placeholder
+        report: |
+          Since this morning every image coming from CELUM shows a grey placeholder in EPIM and in the SAP
+          Commerce shop. Images uploaded directly are fine.
+        goal: DAM images available.
+        symptoms: DAM assets show placeholder.
+        errors: "CelumConnector: token refresh failed: invalid_grant"
+        module: MEDIA
+        steps:
+          - [Checked CELUM availability, "CELUM UI works", ruled_out]
+          - [Checked connector log, "invalid_grant on refresh", confirmed]
+        outcome: resolved
+        resolution: Re-authorized connector, enabled refresh token rotation, resynced.
+      - customer: kessler
+        version: "9.1"
+        date: 2026-01-13
+        severity: S3
+        channel: portal
+        engineer: sophie
+        title: DAM pictures not loading in PIM
+        report: |
+          Images from our DAM are not loading anymore in PIM ("asset unavailable"). Our IT changed the password
+          policy in CELUM before Christmas.
+        goal: Images available for enrichment and export.
+        symptoms: Asset unavailable for DAM-linked media.
+        errors: "401 from CELUM token endpoint"
+        module: MEDIA
+        steps:
+          - [Checked connector status, "Authorization required", confirmed]
+        outcome: resolved
+        resolution: Connector re-authorized with technical user excluded from password expiry.
+
+  - number: SOL-013
+    title: Wrong language exported to a channel after 9.1 upgrade (per-channel locale fallback)
+    issue: |
+      A channel receives texts in the wrong language (usually English or German instead of a regional locale
+      such as de-AT, fr-BE or nl-BE) for products without a translation in that locale.
+    environment_conditions: EPIM 9.1 and later (per-channel fallback chains). Multi-locale channels.
+    cause: |
+      9.1 moved locale fallback chains to the channel level. Upgraded systems receive the GLOBAL chain for
+      every channel, which ignores channel-specific chains configured before (e.g. de-AT -> de-DE -> en).
+    resolution_steps: |
+      1. Open Channels > <channel> > Localization and inspect the fallback chain per locale.
+      2. Re-create the intended chain (e.g. de-AT -> de-DE, fr-BE -> fr-FR) for each channel.
+      3. Run a full export of texts for the channel.
+    verification_steps: Product without de-AT text shows de-DE text in the channel.
+    root_cause: CFG_LOCALE_FALLBACK
+    modules: [I18N, EXPORT]
+    integrations: []
+    min_version: "9.1"
+    max_version: null
+    status: validated
+    cases:
+      - customer: brightline
+        version: "9.2"
+        date: 2026-03-24
+        severity: S2
+        channel: email
+        engineer: priya
+        title: Belgian shop shows English texts
+        report: |
+          After the update this weekend our Belgian French shop (fr-BE) shows English descriptions for many
+          products. Before it showed the French (fr-FR) text when no Belgian text existed.
+        goal: French texts in the Belgian shop.
+        symptoms: English instead of French fallback.
+        errors: ""
+        module: I18N
+        steps:
+          - [Checked translations exist in fr-FR, "Yes, complete", ruled_out]
+          - [Checked channel fallback chain, "Channel uses global chain fr-BE -> en", confirmed]
+        outcome: resolved
+        resolution: Per-channel fallback fr-BE -> fr-FR -> en configured; texts re-exported.
+      - customer: alpenrad
+        version: "9.1"
+        date: 2025-11-25
+        severity: S3
+        channel: portal
+        engineer: jonas
+        title: Austrian shop in English after update
+        report: |
+          Our Austrian Shopify store shows English product texts after the EPIM update. We only maintain de-DE
+          and some de-AT texts.
+        goal: German texts in the Austrian store.
+        symptoms: English fallback instead of German.
+        errors: ""
+        module: I18N
+        steps:
+          - [Checked channel locale config, "de-AT falls back to en (global chain)", confirmed]
+        outcome: resolved
+        resolution: Configured de-AT -> de-DE -> en for the Shopify channel.
+
+  - number: SOL-014
+    title: New attributes missing in translation export (attribute not translatable)
+    issue: |
+      Translation agency (XLIFF export, XTM) does not receive texts for newly created attributes; translated
+      files come back without these fields.
+    environment_conditions: All versions with translation export (XLIFF / XTM connector).
+    cause: The new attributes were created without the "translatable" flag, so they are excluded from translation jobs.
+    resolution_steps: |
+      1. Check Data model > Attributes > <attribute> > "Translatable".
+      2. Enable the flag (requires attribute admin rights) and re-run "Create translation job" for affected products.
+    verification_steps: XLIFF contains the attribute's trans-units.
+    root_cause: CFG_ATTRIBUTE_TRANSLATABLE
+    modules: [I18N, PDM]
+    integrations: [XTM]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: polar
+        version: "9.2"
+        date: 2026-06-02
+        severity: S3
+        channel: email
+        engineer: marco
+        title: XTM jobs miss the new safety notice texts
+        report: |
+          We added the attribute "Safety notice" for all ovens. Translation jobs to XTM do not include it,
+          so Finnish and Swedish texts are empty.
+        goal: Translations for the new attribute.
+        symptoms: New attribute missing in translation job.
+        errors: ""
+        module: I18N
+        steps:
+          - [Checked XTM connector, "Job created, other fields included", ruled_out]
+          - [Checked attribute settings, "Translatable flag off", confirmed]
+        outcome: resolved
+        resolution: Flag enabled, translation jobs re-created.
+      - customer: medisan
+        version: "9.1"
+        date: 2025-12-02
+        severity: S3
+        channel: portal
+        engineer: sophie
+        title: Translation export without new MDR fields
+        report: |
+          The XLIFF files for our translation agency do not contain the new MDR fields (intended purpose,
+          contraindications). Everything else is in the file.
+        goal: Translate regulatory fields.
+        symptoms: New fields missing in XLIFF.
+        errors: ""
+        module: I18N
+        holdout: true
+        steps:
+          - [Checked attribute flags, "Not translatable", confirmed]
+        outcome: resolved
+        resolution: Enabled translatable flag on MDR attributes.
+
+  - number: SOL-019
+    title: Nightly full export takes hours - switch to delta export and batch tuning
+    issue: |
+      The nightly export to a channel takes many hours (often still running in the morning) and blocks other jobs.
+    environment_conditions: All versions; large assortments (>200k products) with full export scheduled every night.
+    cause: Full export of the complete assortment every night; runtime grows linearly with assortment and media count.
+    resolution_steps: |
+      1. Check the job history for runtime trend and exported item count.
+      2. Switch the nightly schedule to delta export; keep a weekly full export on the weekend.
+      3. Set the batch size to 500 (Export > Profile > Advanced) and, on 9.2+, enable 4 parallel workers.
+      4. Ensure the database statistics job runs (index on change log table).
+    verification_steps: Nightly runtime below 1 hour; weekly full export finishes on the weekend.
+    root_cause: PERF_FULL_EXPORT
+    modules: [EXPORT, JOBS]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: alpenrad
+        version: "8.2"
+        date: 2024-12-10
+        severity: S3
+        channel: email
+        engineer: marco
+        title: Amazon export runs until noon
+        report: |
+          Our nightly Amazon export now runs 9-10 hours and is still running when the team starts working.
+          The system is slow until it finishes.
+        goal: Export finished before business hours.
+        symptoms: Very long nightly export.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked job history, "Full export every night, 380k items", confirmed]
+        outcome: resolved
+        resolution: Switched to delta nightly + weekly full; batch size 500.
+      - customer: kessler
+        version: "9.0"
+        date: 2025-07-22
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: Export blocks import jobs in the morning
+        report: |
+          The ERP import in the morning waits because the Shopware export is still running from the night.
+        goal: Imports start on time.
+        symptoms: Export runs into business hours.
+        errors: ""
+        module: JOBS
+        steps:
+          - [Checked scheduler, "Full export nightly since migration to Channel Engine 2", confirmed]
+        outcome: resolved
+        resolution: Delta export nightly, full export Sundays.
+      - customer: vinea
+        version: "9.2"
+        date: 2026-07-07
+        severity: S3
+        channel: email
+        engineer: jonas
+        title: Shopify export takes 7 hours
+        report: |
+          Our export to Shopify takes about 7 hours every night. Is this normal with 120k products?
+        goal: Faster export.
+        symptoms: Long running export.
+        errors: ""
+        module: EXPORT
+        steps:
+          - [Checked profile settings, "Full export with batch size 50, 1 worker", confirmed]
+        outcome: resolved
+        resolution: Delta export nightly, batch 500, 4 parallel workers.
+
+  - number: SOL-025
+    title: Amazon rejects products after category template change (missing required attribute)
+    issue: |
+      Amazon Vendor Central rejects products from the PIM feed with "missing required attribute" errors for
+      attributes that never existed in the mapping.
+    environment_conditions: All versions with Amazon Vendor Central connector.
+    cause: Amazon published a new version of the category (product type) template with new required attributes. The PIM mapping still targets the old template.
+    resolution_steps: |
+      1. Read the feed processing report and list the newly required attributes.
+      2. Download the current product type definition in the connector (Export > Amazon > Templates > Refresh).
+      3. Map the new attributes (or set defaults) and re-send the feed for rejected items.
+    verification_steps: Feed processing report without errors for the product type.
+    root_cause: INT_MARKETPLACE_TEMPLATE
+    modules: [EXPORT]
+    integrations: [AMAZON_VC]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: rheinwerk
+        version: "8.0"
+        date: 2024-08-20
+        severity: S2
+        channel: email
+        engineer: priya
+        title: Amazon rejects all power tools
+        report: |
+          Amazon rejected 1.300 power tools tonight: "Missing required attribute: item_type_keyword". We never had this field.
+        goal: Products live on Amazon.
+        symptoms: Feed rejections for whole category.
+        errors: "Error 90220: Missing required attribute: item_type_keyword"
+        module: EXPORT
+        steps:
+          - [Checked mapping, "Template version outdated", confirmed]
+        outcome: resolved
+        resolution: Template refreshed, item_type_keyword mapped.
+      - customer: vinea
+        version: "9.2"
+        date: 2026-05-19
+        severity: S2
+        channel: portal
+        engineer: marco
+        title: Amazon feed errors for furniture
+        report: |
+          Since this week Amazon returns errors for our furniture: required attribute "assembly_required" missing.
+        goal: Furniture listed on Amazon.
+        symptoms: Feed errors after Amazon change.
+        errors: "Missing required attribute: assembly_required"
+        module: EXPORT
+        holdout: true
+        steps:
+          - [Refreshed template, "New required attributes for FURNITURE", confirmed]
+        outcome: resolved
+        resolution: Mapped new attributes with defaults.
+      - customer: alpenrad
+        version: "9.1"
+        date: 2026-03-03
+        severity: S3
+        channel: email
+        engineer: sophie
+        title: Bikes rejected by Amazon
+        report: |
+          Amazon rejects our e-bikes: missing "battery_cell_composition". This field is in PIM but not mapped.
+        goal: E-bikes on Amazon.
+        symptoms: Rejection for missing attribute.
+        errors: "Missing required attribute: battery_cell_composition"
+        module: EXPORT
+        steps:
+          - [Checked mapping, "New required attribute in template", confirmed]
+        outcome: resolved
+        resolution: Template refreshed and attribute mapped.

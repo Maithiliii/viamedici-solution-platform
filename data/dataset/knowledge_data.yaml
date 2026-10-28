@@ -1,0 +1,502 @@
+# Domain: import & onboarding, classification, product data model.
+
+solutions:
+
+  - number: SOL-005
+    title: SAP import rejects rows with "Unknown unit" (unit of measure mapping)
+    issue: |
+      ERP import from SAP finishes with errors; a subset of materials is rejected with an unknown unit
+      message. Typically after new materials or new units were introduced in SAP.
+    environment_conditions: All versions; SAP ECC / S/4HANA import via IDoc or file. Affects quantity attributes (packaging unit, order unit).
+    cause: |
+      SAP sends internal (language-dependent) unit codes such as "ST" or "KAR". EPIM expects ISO / UN/ECE
+      codes (PCE, CT). Units without an entry in the unit mapping table are rejected.
+    resolution_steps: |
+      1. Open the import log and collect the distinct unknown unit codes (filter on ERR-IMP-2207).
+      2. Add mappings in Import > Mappings > Units (e.g. ST -> PCE, KAR -> CT, PAK -> PK).
+      3. Re-run the import for rejected rows only ("Retry rejected").
+      4. Ask the SAP team to send ISO codes (T006-ISOCODE) for new units in the future.
+    verification_steps: Retry finishes without ERR-IMP-2207; packaging units visible on products.
+    root_cause: DATA_UOM_MAPPING
+    modules: [IMPORT]
+    integrations: [SAP_S4, SAP_ECC]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: kessler
+        version: "8.0"
+        date: 2024-03-12
+        severity: S3
+        channel: email
+        engineer: marco
+        title: SAP import partially fails for new cable drums
+        report: |
+          The nightly SAP import rejected 214 materials. All are new cable drums. Error says unknown unit.
+          We need them in the shop next week.
+        goal: All new materials imported.
+        symptoms: Partial import failure for new materials.
+        errors: "ERR-IMP-2207 Unknown unit 'TRM' for attribute order_unit"
+        module: IMPORT
+        steps:
+          - [Checked import log, "All rejections ERR-IMP-2207 with unit TRM", confirmed]
+          - [Checked unit mapping table, "TRM (drum) not mapped", confirmed]
+        outcome: resolved
+        resolution: Added mapping TRM -> DRM (ISO drum); retried rejected rows.
+      - customer: nordbau
+        version: "8.1"
+        date: 2024-10-08
+        severity: S3
+        channel: portal
+        engineer: sophie
+        title: Import errors after new pallet units in SAP
+        report: |
+          After our logistics department introduced new pallet units in SAP, around 900 articles fail in the
+          import with ERR-IMP-2207.
+        goal: Import working again.
+        symptoms: Import errors for articles with new pallet units.
+        errors: "ERR-IMP-2207 Unknown unit 'PAL'"
+        module: IMPORT
+        steps:
+          - [Checked unit mapping, "PAL not mapped", confirmed]
+        outcome: resolved
+        resolution: Mapped PAL -> PF; retried rejected rows.
+      - customer: brightline
+        version: "9.0"
+        date: 2025-05-13
+        severity: S3
+        channel: email
+        engineer: jonas
+        title: S/4 import rejects LED strips
+        report: |
+          LED strips sold per meter are rejected by the import since we created them in S/4. Error about the unit.
+        goal: LED strips in PIM.
+        symptoms: Rejected rows for meter-based products.
+        errors: "ERR-IMP-2207 Unknown unit 'M' for attribute sales_unit"
+        module: IMPORT
+        holdout: true
+        steps:
+          - [Checked mapping table, "Internal code M not mapped (ISO MTR)", confirmed]
+        outcome: resolved
+        resolution: Added M -> MTR mapping and asked SAP team to send ISO codes.
+      - customer: polar
+        version: "9.2"
+        date: 2026-07-14
+        severity: S4
+        channel: portal
+        engineer: priya
+        title: Import warning unknown unit for spare part sets
+        report: |
+          Spare part sets are not imported: unknown unit SET.
+        goal: Import spare part sets.
+        symptoms: Unknown unit error.
+        errors: "ERR-IMP-2207 Unknown unit 'SET'"
+        module: IMPORT
+        steps:
+          - [Checked mapping, "SET missing", confirmed]
+        outcome: resolved
+        resolution: Mapping SET -> SET (ISO) added.
+
+  - number: SOL-006
+    title: Umlauts and special characters garbled after supplier CSV import (encoding)
+    issue: |
+      Texts imported from supplier or spreadsheet files show broken characters such as "Ã¼" instead of "ü",
+      "Ã©" instead of "é" or "?" in product names.
+    environment_conditions: All versions; CSV/TXT imports created by spreadsheet tools on Windows.
+    cause: The file is encoded in Windows-1252 (ANSI) while the import profile expects UTF-8 (or vice versa).
+    resolution_steps: |
+      1. Check the file encoding (e.g. open in a text editor showing encoding, or `file -i`).
+      2. Set the encoding in Import > Profile > File settings to the real encoding (Windows-1252) or enable "Detect BOM".
+      3. Re-import the file; fix already imported texts by re-importing with "overwrite texts".
+      4. Ask the supplier to deliver UTF-8.
+    verification_steps: Special characters correct in a sample of products.
+    root_cause: CFG_IMPORT_ENCODING
+    modules: [IMPORT]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: hanse
+        version: "8.0"
+        date: 2024-05-07
+        severity: S3
+        channel: email
+        engineer: priya
+        title: Supplier data with broken umlauts
+        report: |
+          The new supplier list for bathroom accessories was imported but all German umlauts are broken
+          ("WaschbeckenablaufgarnitÃ¼r"). Can you fix this?
+        goal: Correct product texts.
+        symptoms: Garbled umlauts after CSV import.
+        errors: ""
+        module: IMPORT
+        steps:
+          - [Checked file encoding, "Windows-1252, profile set to UTF-8", confirmed]
+        outcome: resolved
+        resolution: Encoding set to Windows-1252, re-imported with overwrite.
+      - customer: technoparts
+        version: "8.1"
+        date: 2024-11-26
+        severity: S4
+        channel: portal
+        engineer: marco
+        title: Special characters wrong in product names
+        report: |
+          Product names with "µ" and "°" are shown as "?" after the Excel import.
+        goal: Correct units in product names.
+        symptoms: Question marks instead of special characters.
+        errors: ""
+        module: IMPORT
+        steps:
+          - [Checked file, "Saved as CSV (ANSI)", confirmed]
+        outcome: resolved
+        resolution: Customer saves as "CSV UTF-8"; reimported.
+      - customer: baltic
+        version: "9.1"
+        date: 2026-02-10
+        severity: S3
+        channel: email
+        engineer: sophie
+        title: Latvian characters broken after import
+        report: |
+          Latvian product names (ā, ē, š) are broken after importing the supplier file.
+        goal: Correct Latvian names.
+        symptoms: Broken diacritics.
+        errors: ""
+        module: IMPORT
+        holdout: true
+        steps:
+          - [Checked encoding, "File Windows-1257 (Baltic)", confirmed]
+        outcome: resolved
+        resolution: Profile encoding set to Windows-1257, reimport.
+
+  - number: SOL-007
+    title: Duplicate products after supplier import (leading zeros lost in article keys)
+    issue: |
+      After a supplier/spreadsheet import, products exist twice (e.g. article 004711 and 4711), one with the
+      old data and one with the new data.
+    environment_conditions: All versions; imports matching products by an article number that can contain leading zeros.
+    cause: The spreadsheet tool converted article numbers to numbers and removed leading zeros, so the import did not match existing products and created new ones.
+    resolution_steps: |
+      1. Identify duplicates with Search > "Duplicate check" on the key attribute (normalised).
+      2. Add a key normalisation rule in the import profile (pad to 6 digits / treat as text).
+      3. Merge duplicates with Tools > "Merge products" (keep the original ID, take new values).
+      4. Ask the supplier to format the key column as text.
+    verification_steps: Re-import of the same file creates no new products.
+    root_cause: DATA_KEY_NORMALIZATION
+    modules: [IMPORT, PDM]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: rheinwerk
+        version: "8.0"
+        date: 2024-06-18
+        severity: S2
+        channel: phone
+        engineer: jonas
+        title: 2.000 duplicate products after supplier import
+        report: |
+          After importing the price list from our saw blade supplier we have every product twice. The new ones have no images.
+        goal: No duplicates; prices on original products.
+        symptoms: Duplicates created by import.
+        errors: ""
+        module: IMPORT
+        steps:
+          - [Compared keys of duplicates, "Leading zeros missing on new products", confirmed]
+        outcome: resolved
+        resolution: Normalisation rule added, duplicates merged.
+      - customer: baltic
+        version: "8.1"
+        date: 2024-09-24
+        severity: S3
+        channel: email
+        engineer: priya
+        title: Import created new articles instead of updating
+        report: |
+          The import from the supplier Excel created about 300 new articles. They should update existing ones.
+        goal: Updates on existing articles.
+        symptoms: New articles instead of updates.
+        errors: ""
+        module: IMPORT
+        steps:
+          - [Checked matching key, "Key 00012345 vs 12345", confirmed]
+        outcome: resolved
+        resolution: Key padded to 8 digits in profile; merged duplicates.
+
+  - number: SOL-008
+    title: ETIM features missing after classification upgrade (ETIM 9 -> ETIM 10)
+    issue: |
+      After switching to a new ETIM version, products lose feature values, some classes show "unmapped
+      features", and exports (BMEcat, webshop filters) are incomplete.
+    environment_conditions: EPIM 9.0+ (ETIM 10 support) when upgrading classification from ETIM 9; similar for any ETIM major version change.
+    cause: Feature codes changed or were split/merged between ETIM versions. Without running the remap job using the ETIM change log, values of changed features are not transferred.
+    resolution_steps: |
+      1. Import the official ETIM change log (Classification > ETIM > Change log import).
+      2. Run "Classification remap job" in simulation mode and review unmapped features.
+      3. Map remaining features manually, run the job in execute mode.
+      4. Re-run BMEcat/webshop exports.
+    verification_steps: Simulation report shows 0 unmapped features for active classes.
+    root_cause: UPGRADE_CLASSIFICATION_VERSION
+    modules: [CLASS]
+    integrations: [BMECAT]
+    min_version: "9.0"
+    max_version: null
+    status: validated
+    cases:
+      - customer: kessler
+        version: "9.0"
+        date: 2025-06-17
+        severity: S2
+        channel: email
+        engineer: sophie
+        title: Feature values lost after switch to ETIM 10
+        report: |
+          We switched to ETIM 10 last week. Now many cables have empty features (conductor cross-section etc.)
+          and our wholesalers complain about incomplete BMEcat files.
+        goal: Complete ETIM 10 data.
+        symptoms: Empty features after ETIM upgrade.
+        errors: "BMEcat validation: 18.442 mandatory features empty"
+        module: CLASS
+        steps:
+          - [Checked if remap job ran, "Only class assignment switched, no remap", confirmed]
+        outcome: resolved
+        resolution: Imported change log and ran remap job; 312 features mapped manually.
+      - customer: hanse
+        version: "9.1"
+        date: 2026-02-24
+        severity: S2
+        channel: portal
+        engineer: marco
+        title: ETIM 10 classes show unmapped features
+        report: |
+          After the upgrade we moved to ETIM 10. Many classes show "unmapped features" and values are missing.
+        goal: Clean ETIM 10 classification.
+        symptoms: Unmapped features.
+        errors: ""
+        module: CLASS
+        holdout: true
+        steps:
+          - [Ran remap simulation, "1.204 unmapped features", confirmed]
+        outcome: resolved
+        resolution: Change log imported, remap executed.
+      - customer: brightline
+        version: "9.0"
+        date: 2025-10-07
+        severity: S3
+        channel: email
+        engineer: jonas
+        title: Luminaire features empty after ETIM change
+        report: |
+          Lamp features like "colour rendering index" are empty after changing to ETIM 10.
+        goal: Complete lamp features.
+        symptoms: Feature values missing.
+        errors: ""
+        module: CLASS
+        steps:
+          - [Checked remap job history, "Never executed", confirmed]
+        outcome: resolved
+        resolution: Remap job executed with change log.
+
+  - number: SOL-009
+    title: BMEcat validation fails with invalid FEATURE_SYSTEM_NAME (wrong ECLASS version in profile)
+    issue: |
+      BMEcat files are rejected by the customer's/partner's validator with errors on FEATURE_SYSTEM_NAME or
+      unknown feature IDs.
+    environment_conditions: All versions with BMEcat export using ECLASS.
+    cause: The export profile declares an older ECLASS version (e.g. ECLASS-11.0) while products are classified with a newer version (13.0/14.0).
+    resolution_steps: |
+      1. Open the BMEcat export profile and check "Feature system" and version.
+      2. Set it to the version used for classification (e.g. ECLASS-13.0) or export both versions.
+      3. Re-generate the catalog and validate with the BMEcat validator.
+    verification_steps: Validator passes.
+    root_cause: CFG_EXPORT_STANDARD_VERSION
+    modules: [EXPORT, CLASS]
+    integrations: [BMECAT]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: technoparts
+        version: "8.1"
+        date: 2024-07-30
+        severity: S3
+        channel: email
+        engineer: jonas
+        title: Distributor rejects BMEcat
+        report: |
+          Our distributor rejects the BMEcat catalogue: "ERR-BME-0412 Invalid FEATURE_SYSTEM_NAME". Nothing changed.
+        goal: Catalogue accepted.
+        symptoms: BMEcat rejected.
+        errors: "ERR-BME-0412 Invalid FEATURE_SYSTEM_NAME ECLASS-11.0 for feature 0173-1#02-AAO677#002"
+        module: EXPORT
+        steps:
+          - [Checked profile, "ECLASS-11.0 declared, data ECLASS 13", confirmed]
+        outcome: resolved
+        resolution: Profile updated to ECLASS-13.0.
+      - customer: technoparts
+        version: "9.1"
+        date: 2026-04-14
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: BMEcat errors after ECLASS 14 reclassification
+        report: |
+          Since we reclassified to ECLASS 14 the BMEcat files fail validation again (ERR-BME-0412).
+        goal: Valid catalogues.
+        symptoms: Validation errors.
+        errors: "ERR-BME-0412 Invalid FEATURE_SYSTEM_NAME"
+        module: EXPORT
+        steps:
+          - [Checked profile, "Still ECLASS-13.0", confirmed]
+        outcome: resolved
+        resolution: Profile set to ECLASS-14.0.
+      - customer: baltic
+        version: "9.1"
+        date: 2026-03-17
+        severity: S3
+        channel: email
+        engineer: marco
+        title: Wholesaler cannot read our BMEcat
+        report: |
+          Our German wholesaler says the BMEcat has wrong feature system. ERR-BME-0412.
+        goal: Catalogue accepted by wholesaler.
+        symptoms: BMEcat rejected.
+        errors: "ERR-BME-0412"
+        module: EXPORT
+        holdout: true
+        steps:
+          - [Checked profile feature system, "ECLASS-11.0", confirmed]
+        outcome: resolved
+        resolution: Updated to ECLASS-13.0.
+
+  - number: SOL-010
+    title: Variant shows outdated value - local override set by bulk edit
+    issue: |
+      One or more variants show an old/different value although the parent was updated; other variants of the
+      same product are correct. The effect is visible in the PIM itself, not only in channels.
+    environment_conditions: All versions (8.0+ inheritance model).
+    cause: A bulk edit or import wrote values directly on the variants, which sets a local override ("value locked") and stops inheritance for that attribute.
+    resolution_steps: |
+      1. Open the variant, attribute shows a lock icon / "overridden" badge.
+      2. Use Bulk edit > "Revert to inherited value" for the attribute on affected variants.
+      3. Check the import profile / bulk edit that wrote the values to avoid recurrence.
+    verification_steps: Variants show the inherited badge and the parent's value.
+    root_cause: USER_LOCAL_OVERRIDE
+    modules: [PDM]
+    integrations: []
+    min_version: "8.0"
+    max_version: null
+    status: validated
+    cases:
+      - customer: vinea
+        version: "8.2"
+        date: 2024-12-03
+        severity: S4
+        channel: portal
+        engineer: priya
+        title: Some sofa variants keep old material text
+        report: |
+          We changed the material description on the sofa family. Three of the colour variants still show the
+          old text even in the PIM.
+        goal: Consistent texts.
+        symptoms: Some variants with old value in PIM.
+        errors: ""
+        module: PDM
+        steps:
+          - [Checked export, "Problem visible in PIM already", ruled_out]
+          - [Opened variant, "Attribute overridden locally", confirmed]
+        outcome: resolved
+        resolution: Reverted to inherited value via bulk edit.
+      - customer: lumen
+        version: "9.2"
+        date: 2026-06-23
+        severity: S4
+        channel: email
+        engineer: sophie
+        title: Old prices on a few pen variants
+        report: |
+          A few pen colours show the old recommended retail price in PIM while the family has the new one.
+        goal: Correct prices.
+        symptoms: Some variants differ from parent.
+        errors: ""
+        module: PDM
+        steps:
+          - [Checked variants, "Locked by price import last year", confirmed]
+        outcome: resolved
+        resolution: Reverted override, adjusted import profile.
+      - customer: kessler
+        version: "8.2"
+        date: 2024-12-17
+        severity: S3
+        channel: portal
+        engineer: marco
+        title: Variants differ from master in PIM after import
+        report: |
+          Some variants show different technical data than the master in PIM itself. This happened after an import from a supplier.
+        goal: Variants inherit master data again.
+        symptoms: Variants not inheriting.
+        errors: ""
+        module: PDM
+        holdout: true
+        steps:
+          - [Checked change detection (known 8.x issue), "Not relevant, data wrong in PIM", ruled_out]
+          - [Checked override flags, "Supplier import wrote values on variants", confirmed]
+        outcome: resolved
+        resolution: Reverted overrides; import profile limited to master level.
+
+  - number: SOL-026
+    title: Prices or dimensions imported 1000x too high (decimal separator / locale)
+    issue: |
+      Numeric values from an ERP import are wrong by factor 1000 (e.g. 1.299 imported as 1299) or decimals are lost.
+    environment_conditions: All versions; ERP file imports with locale-specific number format (decimal comma).
+    cause: "The import job parses numbers with the wrong locale (1.299,00 in de-DE format parsed as en-US or vice versa)."
+    resolution_steps: |
+      1. Compare source file values with imported values to confirm the factor.
+      2. Set Import > Profile > Number format locale to the file's locale (e.g. de-DE / lv-LV).
+      3. Re-import affected values; check price exports were not already published.
+    verification_steps: Sample values identical to source.
+    root_cause: CFG_IMPORT_LOCALE
+    modules: [IMPORT]
+    integrations: [D365]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: alpenrad
+        version: "8.2"
+        date: 2025-04-08
+        severity: S1
+        channel: phone
+        engineer: jonas
+        title: Bike prices 1000 times too high
+        report: |
+          Our bikes cost 1.299.000 EUR in the shop since this morning! Dynamics import ran at night.
+        goal: Correct prices immediately.
+        symptoms: Prices multiplied by 1000.
+        errors: ""
+        module: IMPORT
+        steps:
+          - [Checked source file, "1.299,00 in file", confirmed]
+          - [Checked import locale, "en-US", confirmed]
+        outcome: resolved
+        resolution: Locale set to de-DE, re-imported, export re-run.
+      - customer: baltic
+        version: "9.1"
+        date: 2026-04-28
+        severity: S2
+        channel: email
+        engineer: priya
+        title: Screw lengths wrong after Dynamics import
+        report: |
+          After the new Dynamics export format our screw lengths are wrong (4,5 mm became 45 mm).
+        goal: Correct dimensions.
+        symptoms: Decimal lost.
+        errors: ""
+        module: IMPORT
+        steps:
+          - [Checked number format, "File uses decimal comma, profile en", confirmed]
+        outcome: resolved
+        resolution: Locale lv-LV for profile; reimport.

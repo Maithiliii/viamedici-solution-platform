@@ -1,0 +1,110 @@
+[
+  {
+    "case_id": "752714da-1764-4764-8592-b230aa65b647",
+    "case_number": "CS-1012",
+    "expected_solution": "SOL-001",
+    "title": "Lamp variants show outdated wattage in shop"
+  },
+  {
+    "case_id": "19867f32-4535-42c5-951e-a1bc0df849b6",
+    "case_number": "CS-1016",
+    "expected_solution": "SOL-010",
+    "title": "Variants differ from master in PIM after import"
+  },
+  {
+    "case_id": "86e6d7fc-d9dc-4c87-93ea-cd0098171340",
+    "case_number": "CS-1027",
+    "expected_solution": "SOL-022",
+    "title": "Wrong prices in fittings catalogue"
+  },
+  {
+    "case_id": "511e933f-8ddd-41f4-8569-9d8043157def",
+    "case_number": "CS-1028",
+    "expected_solution": "SOL-005",
+    "title": "S/4 import rejects LED strips"
+  },
+  {
+    "case_id": "21de320c-28fb-4d25-894a-b2e886a45151",
+    "case_number": "CS-1035",
+    "expected_solution": "SOL-004",
+    "title": "Shopware shop stopped updating"
+  },
+  {
+    "case_id": "0e5e2993-0d81-47de-a022-4e7bd8095603",
+    "case_number": "CS-1039",
+    "expected_solution": "SOL-020",
+    "title": "SAP stock interface 401"
+  },
+  {
+    "case_id": "4bf5fb6b-52ff-465b-982a-c7f38e2b2ddd",
+    "case_number": "CS-1040",
+    "expected_solution": "SOL-002",
+    "title": "Many products missing in Shopware after update to 9.0"
+  },
+  {
+    "case_id": "8d9da6ed-cc86-4b86-8263-e40e2e129dea",
+    "case_number": "CS-1045",
+    "expected_solution": "SOL-015",
+    "title": "Regulatory approval step not visible for reviewers"
+  },
+  {
+    "case_id": "2b2ed92e-791a-41b2-85f5-ee53f0f4e197",
+    "case_number": "CS-1047",
+    "expected_solution": "SOL-014",
+    "title": "Translation export without new MDR fields"
+  },
+  {
+    "case_id": "bcce5e3a-4f3e-431e-a651-5f3b992279f3",
+    "case_number": "CS-1049",
+    "expected_solution": "SOL-016",
+    "title": "Release automation broken"
+  },
+  {
+    "case_id": "b09ac8c7-8ccb-4020-9755-561ae865eb8e",
+    "case_number": "CS-1053",
+    "expected_solution": "SOL-006",
+    "title": "Latvian characters broken after import"
+  },
+  {
+    "case_id": "ea0f56be-b849-4898-a0b4-debf21cd1361",
+    "case_number": "CS-1055",
+    "expected_solution": "SOL-008",
+    "title": "ETIM 10 classes show unmapped features"
+  },
+  {
+    "case_id": "cbb88559-8c68-45dc-b396-6c796402699e",
+    "case_number": "CS-1057",
+    "expected_solution": "SOL-009",
+    "title": "Wholesaler cannot read our BMEcat"
+  },
+  {
+    "case_id": "b51701d4-bd82-49b6-b613-430953237222",
+    "case_number": "CS-1059",
+    "expected_solution": "SOL-017",
+    "title": "Search results outdated"
+  },
+  {
+    "case_id": "f4dbce0f-52be-4598-b1e9-047445537157",
+    "case_number": "CS-1065",
+    "expected_solution": "SOL-025",
+    "title": "Amazon feed errors for furniture"
+  },
+  {
+    "case_id": "69b8cafd-fbd2-47b4-a8c6-4b3e42fc46e0",
+    "case_number": "CS-1066",
+    "expected_solution": "SOL-023",
+    "title": "Regulatory fields hidden for new team members"
+  },
+  {
+    "case_id": "161ee946-0e3a-44c3-bbb8-9fa506088fdd",
+    "case_number": "CS-1068",
+    "expected_solution": "SOL-021",
+    "title": "Stock updates from SAP partially fail"
+  },
+  {
+    "case_id": "c5141764-9f89-480d-8da1-0badd647803f",
+    "case_number": "CS-1069",
+    "expected_solution": "SOL-011",
+    "title": "Missing pictures in online shop after media reorganisation"
+  }
+]

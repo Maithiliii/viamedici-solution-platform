@@ -1,0 +1,42 @@
+# Demo scenarios: NOT seeded. Create them live in the Engineer Workspace
+# ("New case") to demonstrate the full loop.
+
+cases:
+  - id: demo-1
+    purpose: |
+      The brief's own example. The agent must combine knowledge across solutions and versions:
+      - SOL-001 (full export workaround) looks similar but is NOT applicable: fixed in 9.0, and it already
+        failed for this customer on 9.0 (case history).
+      - The update was 9.0 -> 9.1: release 9.1 has a BREAKING change in workflow conditions (SOL-016),
+        which stops automatic release; the Shopware export only takes released products (SOL-003).
+      Expected guidance: check WF-COND-301 in the workflow log + workflow status of missing products.
+    customer: rheinwerk
+    title: Product information not appearing correctly on webshop after update
+    report: |
+      Hello, our product information is not appearing correctly on the webshop after an update.
+      Since the weekend new products and price changes coming from SAP are not visible in the Shopware shop,
+      older products are still there. The export job is green. We already tried a full export like last time,
+      it did not change anything.
+    expected_solutions: [SOL-016, SOL-003]
+    not_applicable: [SOL-001]
+
+  - id: demo-2
+    purpose: |
+      No validated solution exists. The agent should say so (abstain), point to the 5 similar OPEN cases on
+      9.2 and the 9.2 release change "parallel export workers"; Problem Detection proposes a Problem record
+      with the workaround "workers = 1" found in one of the open cases.
+    customer: polar
+    title: Shopware/Mirakl export stuck at 99 percent
+    report: |
+      Our nightly Mirakl export got stuck at 99% again this night. The job stays running and we have to cancel it.
+      It happens mostly after our media team uploads new energy labels.
+    expected_solutions: []
+
+  - id: demo-3
+    purpose: Straightforward reuse - one validated solution with a strong track record.
+    customer: hanse
+    title: Broken umlauts after supplier import
+    report: |
+      We imported the new price list from our faucet supplier and now all product names show characters like
+      "Ã¤" and "Ã¶" instead of German umlauts.
+    expected_solutions: [SOL-006]

@@ -1,0 +1,114 @@
+name: sep
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Executed once on first start (empty volume): extensions, schema, search functions
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  directus:
+    image: directus/directus:11.17.4
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${DIRECTUS_PORT:-8055}:8055"
+    environment:
+      KEY: ${DIRECTUS_KEY}
+      SECRET: ${DIRECTUS_SECRET}
+      PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
+      DB_CLIENT: pg
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD}
+      # Extensions are rebuilt locally; auto-reload makes development faster
+      EXTENSIONS_AUTO_RELOAD: "true"
+      # Values the SEP extension reads (proxy to the agent service)
+      SEP_AGENT_SERVICE_URL: ${AGENT_SERVICE_URL}
+      SEP_AGENT_SERVICE_SECRET: ${AGENT_SERVICE_SECRET}
+      # Flows may call the internal agent service
+      FLOWS_ENV_ALLOW_LIST: SEP_AGENT_SERVICE_URL,SEP_AGENT_SERVICE_SECRET
+      IMPORT_IP_DENY_LIST: ""
+      CACHE_SCHEMA: "true"
+      WEBSOCKETS_ENABLED: "true"
+      # Directus' built-in AI assistant is not used (SEP has its own agents)
+      AI_ENABLED: "false"
+    volumes:
+      - uploads:/directus/uploads
+      - ./directus/extensions:/directus/extensions
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8055/server/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  agent-service:
+    build: ./agent-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${AGENT_SERVICE_PORT:-8000}:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DIRECTUS_URL: http://directus:8055
+    extra_hosts:
+      # Reach Ollama running on the host machine
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data:ro
+      - ./eval:/app/eval
+      # Live code mount (no rebuild needed while developing)
+      - ./agent-service/sep:/app/sep
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: configures Directus, loads the dataset, builds embeddings + search index (idempotent)
+  setup:
+    build: ./agent-service
+    depends_on:
+      directus:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DIRECTUS_URL: http://directus:8055
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data:ro
+      - ./eval:/app/eval
+      # Live code mount (no rebuild needed while developing)
+      - ./agent-service/sep:/app/sep
+    command: ["python", "-m", "sep.cli.setup"]
+    restart: "no"
+
+volumes:
+  pgdata:
+  uploads:

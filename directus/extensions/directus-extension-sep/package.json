@@ -1,0 +1,25 @@
+{
+  "name": "directus-extension-sep",
+  "description": "Solution Enablement Platform: Engineer Workspace module + endpoint (agent proxy, suggestion approval)",
+  "version": "1.0.0",
+  "type": "module",
+  "keywords": ["directus", "directus-extension", "directus-extension-bundle"],
+  "files": ["dist"],
+  "directus:extension": {
+    "type": "bundle",
+    "path": { "app": "dist/app.js", "api": "dist/api.js" },
+    "entries": [
+      { "type": "module", "name": "sep-workspace", "source": "src/module/index.js" },
+      { "type": "endpoint", "name": "sep", "source": "src/endpoint/index.js" }
+    ],
+    "host": "^11.0.0"
+  },
+  "scripts": {
+    "build": "directus-extension build",
+    "dev": "directus-extension build -w --no-minify"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "17.1.4",
+    "vue": "^3.5.0"
+  }
+}

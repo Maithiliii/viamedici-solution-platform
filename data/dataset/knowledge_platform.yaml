@@ -1,0 +1,610 @@
+# Domain: workflow, search, API, print, permissions, scheduler, infrastructure.
+
+solutions:
+
+  - number: SOL-015
+    title: Products stuck in approval - workflow step assigned to a removed or renamed role
+    issue: |
+      Products stay in an approval step for days; nobody sees the tasks in their inbox. Often after a team
+      reorganisation or role cleanup.
+    environment_conditions: All versions with approval workflows.
+    cause: The workflow step is assigned to a role that was renamed or deleted. Tasks are created but have no eligible assignee ("orphaned tasks").
+    resolution_steps: |
+      1. Open Workflow > Monitor and filter "orphaned tasks".
+      2. Edit the workflow definition and assign the step to the current role.
+      3. Run Tools > "Reassign orphaned tasks" for the workflow.
+    verification_steps: Tasks visible in the team inbox; products move on after approval.
+    root_cause: CFG_WORKFLOW_ROLE
+    modules: [WORKFLOW, AUTH]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: lumen
+        version: "8.2"
+        date: 2025-03-11
+        severity: S2
+        channel: email
+        engineer: marco
+        title: Nothing gets approved since team restructuring
+        report: |
+          Since our editorial team was restructured, products are stuck in "Content approval". Nobody has tasks.
+        goal: Approvals flowing again.
+        symptoms: Products stuck, no tasks in inbox.
+        errors: ""
+        module: WORKFLOW
+        steps:
+          - [Checked workflow monitor, "312 orphaned tasks", confirmed]
+          - [Checked role, "Role 'Content Approver' deleted", confirmed]
+        outcome: resolved
+        resolution: Step assigned to 'Editorial Lead'; orphaned tasks reassigned.
+      - customer: medisan
+        version: "9.1"
+        date: 2025-11-18
+        severity: S2
+        channel: portal
+        engineer: jonas
+        title: Regulatory approval step not visible for reviewers
+        report: |
+          Our regulatory reviewers do not see approval tasks anymore. We renamed some roles for the four-eyes process.
+        goal: Four-eyes approval working.
+        symptoms: Reviewers have no tasks.
+        errors: ""
+        module: WORKFLOW
+        holdout: true
+        steps:
+          - [Checked workflow definition, "Step assigned to old role name", confirmed]
+        outcome: resolved
+        resolution: Role assignment updated, tasks reassigned.
+      - customer: nordbau
+        version: "9.2"
+        date: 2026-05-05
+        severity: S3
+        channel: email
+        engineer: sophie
+        title: Products remain in "Technical review"
+        report: |
+          About 80 products remain in technical review for two weeks. Our product managers say they have no tasks.
+        goal: Products reviewed.
+        symptoms: Products stuck in review.
+        errors: ""
+        module: WORKFLOW
+        steps:
+          - [Checked orphaned tasks, "80 orphaned", confirmed]
+        outcome: resolved
+        resolution: Reassigned to role 'Product Management'.
+
+  - number: SOL-016
+    title: Automatic release no longer triggers after 9.1 upgrade (legacy workflow condition syntax)
+    issue: |
+      Products that used to be released automatically (e.g. after ERP import or when all mandatory fields are
+      filled) now remain in status "in enrichment"/"in review" after the upgrade to 9.1. Manual release works.
+    environment_conditions: EPIM 9.1 and later; workflows with conditions written before 9.1.
+    cause: |
+      9.1 introduced the template syntax {{attribute.code}} for workflow conditions. Conditions still using the
+      legacy ${attr:code} syntax are evaluated as FALSE (warning WF-COND-301 in the workflow log), so automatic
+      transitions never fire.
+    resolution_steps: |
+      1. Search the workflow log for WF-COND-301 warnings.
+      2. Open the workflow definition, rewrite each condition to the {{attribute.code}} syntax.
+      3. Use Workflow > Tools > "Re-evaluate conditions" for products waiting in the affected step.
+    verification_steps: Waiting products move to "released"; no new WF-COND-301 warnings.
+    root_cause: UPGRADE_WORKFLOW_SYNTAX
+    modules: [WORKFLOW]
+    integrations: []
+    min_version: "9.1"
+    max_version: null
+    status: validated
+    cases:
+      - customer: medisan
+        version: "9.1"
+        date: 2025-10-21
+        severity: S2
+        channel: email
+        engineer: priya
+        title: Auto-release stopped working after update
+        report: |
+          Since the update to 9.1 our products are not released automatically anymore when the regulatory
+          check is complete. We have to click release for every product.
+        goal: Automatic release as before.
+        symptoms: Automatic transition does not fire.
+        errors: "WF-COND-301 legacy expression '${attr:reg_check_done} == true' evaluated as false"
+        module: WORKFLOW
+        steps:
+          - [Checked workflow log, "WF-COND-301 warnings", confirmed]
+        outcome: resolved
+        resolution: Conditions rewritten to {{attribute.reg_check_done}}; re-evaluated waiting products.
+      - customer: technoparts
+        version: "9.1"
+        date: 2025-11-04
+        severity: S3
+        channel: portal
+        engineer: sophie
+        title: ERP-updated products stay in "in enrichment"
+        report: |
+          Products updated from Dynamics should go to released automatically when complete. Since last week's
+          upgrade they stay in "in enrichment".
+        goal: ERP updates released automatically.
+        symptoms: Products not released automatically.
+        errors: ""
+        module: WORKFLOW
+        steps:
+          - [Checked completeness, "Products complete", ruled_out]
+          - [Checked conditions, "Legacy ${attr:...} syntax", confirmed]
+        outcome: resolved
+        resolution: Rewrote conditions; re-evaluated.
+      - customer: alpenrad
+        version: "9.1"
+        date: 2025-12-16
+        severity: S3
+        channel: email
+        engineer: marco
+        title: Release automation broken
+        report: |
+          Our automatic release rule does not work anymore after the update. Products stay in review.
+        goal: Automation working.
+        symptoms: Products stay in review.
+        errors: "WF-COND-301"
+        module: WORKFLOW
+        holdout: true
+        steps:
+          - [Checked log, "WF-COND-301", confirmed]
+        outcome: resolved
+        resolution: New syntax applied.
+
+  - number: SOL-017
+    title: PIM search does not find new or changed products (OpenSearch index read-only)
+    issue: |
+      Products created or changed recently cannot be found with the PIM search; older data is found. The
+      indexing job shows errors or stays "pending".
+    environment_conditions: EPIM 9.0 and later (OpenSearch). On-prem installations with local OpenSearch.
+    cause: OpenSearch switched the index to read-only (flood-stage disk watermark reached, default 95% disk usage). Indexing requests are rejected with "index read-only / allow delete".
+    resolution_steps: |
+      1. Check the indexing job log for "FORBIDDEN/12/index read-only / allow delete (api)".
+      2. Free disk space or extend the volume on the OpenSearch node.
+      3. Remove the block: PUT /<index>/_settings {"index.blocks.read_only_allow_delete": null}.
+      4. Run Jobs > "Search reindex (delta)".
+    verification_steps: New products are found; indexing job green.
+    root_cause: INFRA_INDEX_READONLY
+    modules: [SEARCH, JOBS]
+    integrations: []
+    min_version: "9.0"
+    max_version: null
+    status: validated
+    cases:
+      - customer: kessler
+        version: "9.0"
+        date: 2025-08-12
+        severity: S2
+        channel: portal
+        engineer: marco
+        title: Search does not find new products
+        report: |
+          Products created since Friday cannot be found in the PIM search. Older products are found.
+        goal: Search working for new products.
+        symptoms: New products not searchable.
+        errors: "IndexJob: cluster_block_exception FORBIDDEN/12/index read-only / allow delete (api)"
+        module: SEARCH
+        steps:
+          - [Checked index job log, "read-only block", confirmed]
+          - [Checked disk, "96% used", confirmed]
+        outcome: resolved
+        resolution: Volume extended, block removed, delta reindex.
+      - customer: hanse
+        version: "9.1"
+        date: 2026-03-31
+        severity: S3
+        channel: email
+        engineer: jonas
+        title: Search results outdated
+        report: |
+          The search shows old product names; changes from this week are not found.
+        goal: Current search results.
+        symptoms: Stale search.
+        errors: "cluster_block_exception"
+        module: SEARCH
+        holdout: true
+        steps:
+          - [Checked OpenSearch disk, "Flood stage", confirmed]
+        outcome: resolved
+        resolution: Old snapshots removed, block removed, reindex.
+
+  - number: SOL-018
+    title: PIM search results outdated (Solr core out of sync)
+    issue: |
+      Search results in the PIM are outdated or incomplete; changes from the last days are not found.
+    environment_conditions: EPIM 8.x only (Apache Solr). Not applicable to 9.0+ (OpenSearch).
+    cause: The Solr delta import job failed or was disabled (e.g. after a server restart), so the Solr core is no longer in sync.
+    resolution_steps: |
+      1. Check Jobs > "Solr delta import" status and last success.
+      2. Re-enable the job and run "Solr full import" outside business hours.
+    verification_steps: Recently changed products found.
+    root_cause: INFRA_SOLR_OUT_OF_SYNC
+    modules: [SEARCH, JOBS]
+    integrations: []
+    min_version: "8.0"
+    max_version: "8.2"
+    status: validated
+    cases:
+      - customer: rheinwerk
+        version: "8.0"
+        date: 2024-10-01
+        severity: S3
+        channel: email
+        engineer: sophie
+        title: Search does not show changed products
+        report: |
+          After the server maintenance last week the search does not find products we changed.
+        goal: Current search.
+        symptoms: Stale search after maintenance.
+        errors: ""
+        module: SEARCH
+        steps:
+          - [Checked Solr delta job, "Disabled since restart", confirmed]
+        outcome: resolved
+        resolution: Job re-enabled, full import run.
+      - customer: hanse
+        version: "8.2"
+        date: 2025-05-27
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: Search incomplete
+        report: |
+          Search finds only part of our new fittings.
+        goal: Complete search.
+        symptoms: Incomplete search results.
+        errors: ""
+        module: SEARCH
+        steps:
+          - [Checked Solr job, "Failed with OutOfMemory 5 days ago", confirmed]
+        outcome: resolved
+        resolution: Heap increased, full import.
+
+  - number: SOL-020
+    title: Integrations receive HTTP 401 after upgrade to 9.0 (Basic Auth removed, OAuth2 required)
+    issue: |
+      After upgrading to EPIM 9.0, ERP/shop/middleware integrations calling the EPIM REST API fail with HTTP 401.
+    environment_conditions: EPIM 9.0 and later; integrations that used Basic authentication.
+    cause: Basic authentication was deprecated in 8.2 and removed in 9.0. Clients get 401 with API-AUTH-410.
+    resolution_steps: |
+      1. Confirm error code API-AUTH-410 in the API access log.
+      2. Create an OAuth2 client (Administration > API clients) with the needed scopes.
+      3. Switch the integration to client-credentials flow (token endpoint /oauth/token).
+    verification_steps: Integration calls return 200; no API-AUTH-410 in log.
+    root_cause: UPGRADE_API_AUTH
+    modules: [API]
+    integrations: []
+    min_version: "9.0"
+    max_version: null
+    status: validated
+    cases:
+      - customer: brightline
+        version: "9.0"
+        date: 2025-04-15
+        severity: S1
+        channel: phone
+        engineer: jonas
+        title: Middleware cannot connect after upgrade
+        report: |
+          Our middleware that pushes stock data to EPIM gets 401 since the upgrade.
+        goal: Middleware connected.
+        symptoms: HTTP 401 for API calls.
+        errors: "401 Unauthorized - API-AUTH-410 Basic authentication not supported"
+        module: API
+        steps:
+          - [Checked API log, "API-AUTH-410", confirmed]
+        outcome: resolved
+        resolution: OAuth2 client created; middleware switched to client credentials.
+      - customer: rheinwerk
+        version: "9.0"
+        date: 2025-08-26
+        severity: S2
+        channel: email
+        engineer: marco
+        title: SAP stock interface 401
+        report: |
+          SAP PI cannot send data to PIM since the update. 401 errors.
+        goal: Interface working.
+        symptoms: 401 errors.
+        errors: "API-AUTH-410"
+        module: API
+        holdout: true
+        steps:
+          - [Checked log, "Basic auth used", confirmed]
+        outcome: resolved
+        resolution: OAuth2 client configured in SAP PI.
+  - number: SOL-027
+    title: API returns 401 "missing credentials" although token is valid (reverse proxy strips Authorization header)
+    issue: |
+      API clients get HTTP 401 with API-AUTH-401 "missing credentials" although they send a valid OAuth2 bearer token.
+      Calls directly on the server (bypassing the proxy) work.
+    environment_conditions: All versions; installations behind a corporate reverse proxy / WAF (Apache, F5, nginx).
+    cause: The reverse proxy does not forward the Authorization header (e.g. Apache without "CGIPassAuth on" / header rewrite rule, WAF policy).
+    resolution_steps: |
+      1. Compare error codes: API-AUTH-401 (no credentials received) vs API-AUTH-410 (basic auth).
+      2. Call the API directly on the application server with the same token; if it works, the proxy is the cause.
+      3. Configure the proxy to forward Authorization (Apache: RequestHeader / CGIPassAuth; F5: allow header).
+    verification_steps: Calls through the proxy succeed.
+    root_cause: INFRA_PROXY_AUTH_HEADER
+    modules: [API]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: medisan
+        version: "9.0"
+        date: 2025-05-27
+        severity: S2
+        channel: email
+        engineer: jonas
+        title: API returns 401 after EPIM upgrade
+        report: |
+          After the EPIM 9.0 upgrade our integration to the ERP middleware fails with 401. We already switched to
+          OAuth2 as described in the upgrade guide, but it still fails. Token request works.
+        goal: API working with OAuth2.
+        symptoms: 401 although OAuth2 token is valid.
+        errors: "401 Unauthorized - API-AUTH-401 missing credentials"
+        module: API
+        other_solutions:
+          - {solution: SOL-020, outcome: failed, notes: "OAuth2 migration was already done; 401 persisted. Red herring: the error code was API-AUTH-401, not API-AUTH-410."}
+        steps:
+          - [Checked OAuth2 client, "Client valid, token issued", ruled_out]
+          - [Compared API log error code, "API-AUTH-401 (missing credentials), not API-AUTH-410", confirmed]
+          - [Called API directly on app server with token, "Works", confirmed]
+          - [Checked proxy config, "WAF policy strips Authorization", confirmed]
+        outcome: resolved
+        resolution: WAF policy changed to forward the Authorization header. The OAuth2 migration (SOL-020) alone was not sufficient.
+      - customer: kessler
+        version: "9.1"
+        date: 2026-02-17
+        severity: S2
+        channel: portal
+        engineer: priya
+        title: New Shopware middleware gets 401 from EPIM API
+        report: |
+          Our new middleware gets 401 "missing credentials" from the EPIM API. Same token works in Postman on the server.
+        goal: Middleware connected.
+        symptoms: 401 through proxy only.
+        errors: "API-AUTH-401 missing credentials"
+        module: API
+        steps:
+          - [Tested direct call, "200 OK", confirmed]
+          - [Checked Apache config, "Authorization not forwarded", confirmed]
+        outcome: resolved
+        resolution: Apache rule added to forward Authorization header.
+
+  - number: SOL-021
+    title: Marketplace or middleware sync fails with HTTP 429 after 9.2 (API rate limiting)
+    issue: |
+      High-frequency integrations (marketplace sync, middleware, stock updates) fail intermittently with HTTP 429
+      after upgrading to 9.2.
+    environment_conditions: EPIM 9.2 and later; clients sending more than 600 requests per minute.
+    cause: 9.2 enabled default API rate limiting of 600 requests/min per client.
+    resolution_steps: |
+      1. Confirm 429 responses and Retry-After header in the API log.
+      2. Raise the limit for the client (Administration > API clients > Rate limit) after sizing review, and/or
+      3. Make the client respect Retry-After and use bulk endpoints (/bulk/products).
+    verification_steps: No 429 during a full sync cycle.
+    root_cause: INT_RATE_LIMIT
+    modules: [API]
+    integrations: [MIRAKL]
+    min_version: "9.2"
+    max_version: null
+    status: validated
+    cases:
+      - customer: brightline
+        version: "9.2"
+        date: 2026-03-31
+        severity: S2
+        channel: email
+        engineer: marco
+        title: Mirakl sync fails intermittently
+        report: |
+          Since the update our 15-minute Mirakl sync fails every few runs with "Too Many Requests".
+        goal: Reliable marketplace sync.
+        symptoms: Intermittent 429 errors.
+        errors: "HTTP 429 Too Many Requests (Retry-After: 12)"
+        module: API
+        steps:
+          - [Checked API log, "Up to 1.400 req/min from Mirakl connector", confirmed]
+        outcome: resolved
+        resolution: Client limit raised to 2.000 req/min; connector switched to bulk endpoint.
+      - customer: polar
+        version: "9.2"
+        date: 2026-06-09
+        severity: S3
+        channel: portal
+        engineer: priya
+        title: Stock updates from SAP partially fail
+        report: |
+          Some stock updates from SAP fail with 429 since the 9.2 upgrade.
+        goal: All stock updates processed.
+        symptoms: 429 for part of the updates.
+        errors: "429 Too Many Requests"
+        module: API
+        holdout: true
+        steps:
+          - [Checked client config, "Default limit 600/min", confirmed]
+        outcome: resolved
+        resolution: Retry-After handling in middleware; limit raised.
+
+  - number: SOL-022
+    title: Print catalogue shows wrong prices (InDesign data source uses default price scope)
+    issue: |
+      Generated print catalogues / data sheets show list prices or prices of another country instead of the intended price list.
+    environment_conditions: All versions with InDesign publishing connector and scoped (channel/country) price attributes.
+    cause: The InDesign template's data source references the default scope instead of the catalogue's price list scope.
+    resolution_steps: |
+      1. Open Publishing > Templates > <template> > Data source and check the scope for price attributes.
+      2. Set the scope to the catalogue's price list (e.g. "PL-DE-B2B").
+      3. Re-generate the affected pages.
+    verification_steps: Prices on generated pages match the price list.
+    root_cause: CFG_PRINT_SCOPE
+    modules: [PRINT]
+    integrations: [INDESIGN]
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: nordbau
+        version: "8.1"
+        date: 2024-08-06
+        severity: S2
+        channel: email
+        engineer: marco
+        title: Catalogue shows consumer prices instead of trade prices
+        report: |
+          Our new trade catalogue shows the consumer prices. It must show B2B prices. Print deadline is Friday.
+        goal: Correct prices before print.
+        symptoms: Wrong price list in catalogue.
+        errors: ""
+        module: PRINT
+        steps:
+          - [Checked template data source, "Default scope", confirmed]
+        outcome: resolved
+        resolution: Scope set to PL-DE-B2B; pages regenerated.
+      - customer: lumen
+        version: "9.2"
+        date: 2026-08-18
+        severity: S3
+        channel: portal
+        engineer: jonas
+        title: Data sheets with Irish prices for UK
+        report: |
+          The product data sheets for UK show EUR prices from the Irish price list.
+        goal: GBP prices.
+        symptoms: Wrong country prices on data sheets.
+        errors: ""
+        module: PRINT
+        steps:
+          - [Checked scope, "Template copied from IE, scope not changed", confirmed]
+        outcome: resolved
+        resolution: Scope fixed to PL-UK.
+      - customer: hanse
+        version: "8.2"
+        date: 2025-04-15
+        severity: S3
+        channel: email
+        engineer: sophie
+        title: Wrong prices in fittings catalogue
+        report: |
+          The catalogue preview shows prices from the Austrian price list.
+        goal: German prices.
+        symptoms: Wrong price list.
+        errors: ""
+        module: PRINT
+        holdout: true
+        steps:
+          - [Checked data source, "Scope PL-AT", confirmed]
+        outcome: resolved
+        resolution: Scope changed to PL-DE.
+
+  - number: SOL-023
+    title: Users cannot edit attributes after role change (attribute group rights missing)
+    issue: |
+      Users can open products but attributes are read-only or hidden after they were moved to a new role.
+    environment_conditions: All versions.
+    cause: Attribute group rights are granted per role and are not copied when creating a new role. The new role lacks write rights on attribute groups.
+    resolution_steps: |
+      1. Compare Administration > Roles > <old role> > Attribute groups with the new role.
+      2. Grant read/write on the required attribute groups.
+      3. Ask users to log in again (rights are cached per session).
+    verification_steps: User can edit the attributes.
+    root_cause: CFG_PERMISSION_GROUPS
+    modules: [AUTH]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: lumen
+        version: "8.2"
+        date: 2025-03-25
+        severity: S3
+        channel: email
+        engineer: priya
+        title: Editors cannot edit marketing texts
+        report: |
+          Our editors were moved to the new role "Content Editor" and now cannot edit marketing texts. Fields are grey.
+        goal: Editors can work.
+        symptoms: Read-only fields after role change.
+        errors: ""
+        module: AUTH
+        steps:
+          - [Compared role rights, "Attribute group 'Marketing' missing", confirmed]
+        outcome: resolved
+        resolution: Rights granted.
+      - customer: medisan
+        version: "9.1"
+        date: 2026-05-26
+        severity: S3
+        channel: portal
+        engineer: marco
+        title: Regulatory fields hidden for new team members
+        report: |
+          New regulatory team members do not see the MDR fields at all.
+        goal: Visibility of MDR fields.
+        symptoms: Hidden attributes.
+        errors: ""
+        module: AUTH
+        holdout: true
+        steps:
+          - [Checked role, "No read right on group 'Regulatory'", confirmed]
+        outcome: resolved
+        resolution: Read/write granted on 'Regulatory'.
+
+  - number: SOL-024
+    title: Scheduled job skipped or runs twice on daylight saving time change
+    issue: |
+      A nightly job (import/export) did not run, or ran twice, on the night of the daylight saving time change.
+    environment_conditions: All versions; jobs scheduled between 02:00 and 03:00 local time with scheduler timezone set to a local zone.
+    cause: On the spring DST change the hour 02:00-03:00 does not exist (job skipped); in autumn it exists twice (job runs twice).
+    resolution_steps: |
+      1. Check the job history around the DST date.
+      2. Move the schedule outside 02:00-03:00 or set the scheduler timezone to UTC (Administration > Scheduler).
+      3. Run the skipped job manually.
+    verification_steps: Next DST change without skipped/duplicate runs.
+    root_cause: INFRA_SCHEDULER_TIMEZONE
+    modules: [JOBS]
+    integrations: []
+    min_version: null
+    max_version: null
+    status: validated
+    cases:
+      - customer: kessler
+        version: "8.2"
+        date: 2025-03-31
+        severity: S3
+        channel: email
+        engineer: sophie
+        title: Nightly SAP import did not run on Sunday
+        report: |
+          The SAP import scheduled at 02:30 did not run in the night to Sunday. All other nights fine.
+        goal: Reliable nightly import.
+        symptoms: Job skipped once.
+        errors: ""
+        module: JOBS
+        steps:
+          - [Checked job history, "No run on 2025-03-30 (DST)", confirmed]
+        outcome: resolved
+        resolution: Schedule moved to 03:15.
+      - customer: polar
+        version: "9.0"
+        date: 2025-10-27
+        severity: S4
+        channel: portal
+        engineer: jonas
+        title: Export ran twice on Sunday night
+        report: |
+          Our Mirakl export ran twice on Sunday night and sent duplicate offers.
+        goal: No duplicate runs.
+        symptoms: Duplicate run.
+        errors: ""
+        module: JOBS
+        steps:
+          - [Checked job history, "Two runs at 02:30 (DST end)", confirmed]
+        outcome: resolved
+        resolution: Scheduler timezone set to UTC.
