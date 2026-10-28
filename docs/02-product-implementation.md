@@ -1,190 +1,189 @@
-# 02 · Product & Implementation Document
+# 02 Product & Implementation
 
 **Project:** Solution Enablement Platform (SEP) for Viamedici
-**Author:** Maithili · **Status:** Draft v0.1 · **Date:** 15 Oct 2026 · **Deadline:** 28 Oct 2026
+**Author:** Maithili
+**Date:** October 2026
 
-> Research and the reasoning behind decisions D1–D11: see [01-research.md](01-research.md).
+The research behind this and decisions D1 to D11 are in [01-research.md](01-research.md). How the code works in detail is in [03-technical.md](03-technical.md).
 
----
+## 1. Product idea
 
-## 1. Product concept
+### 1.1 In one sentence
 
-### 1.1 One-liner
-> **SEP turns every solved customer case into reusable, evidence-backed knowledge, and puts that knowledge in front of the engineer the moment a new case arrives.**
+SEP keeps the knowledge from solved customer cases and shows it to the engineer as soon as a new case comes in, together with whether the old fix still applies.
 
-### 1.2 The problem in one picture
-Today: *new case → engineer investigates from zero → fix → ticket closed → knowledge lost.*
-With SEP: *new case → AI finds what we already know and whether it applies → engineer investigates with a head start → fix → knowledge captured and improved → next case is faster.*
+### 1.2 Before and after
+
+Today: new case, the engineer starts from zero, finds a fix, closes the ticket, and the knowledge is mostly lost.
+
+With SEP: new case, the AI finds what we already know and checks if it fits this customer, the engineer starts with a head start, and after the fix the knowledge is saved and the next case is faster.
 
 ### 1.3 Users
 
-| Persona | Goal | What SEP gives them |
+| User | Wants to | What SEP gives them |
 |---|---|---|
-| **Support / Solution Engineer** | Solve the case quickly and correctly | Structured case, similar history, ranked hypotheses, next steps, ready-made customer questions |
-| **Business Solution Architect** | Keep solution quality high, spot systemic issues | Approves knowledge, sees solution track records, recurring-problem clusters |
-| **Knowledge reviewer** (can be the architect) | Keep the knowledge base clean | Merge proposals, stale/duplicate warnings |
-| **Admin** | Run the platform | Directus admin, roles, agent run logs, cost/latency |
+| Support / solution engineer | Solve the case fast and correctly | Structured case, similar cases and solutions, hypotheses, next steps, questions for the customer |
+| Solution architect | Keep solutions correct, see bigger issues | Approves knowledge, sees track records, sees groups of related open cases |
+| Admin | Run the platform | Directus admin, roles, logs of every agent run |
 
-### 1.4 Product principles
-1. **Engineer in control:** AI suggests, humans decide. No silent writes.
-2. **Grounded or silent:** every AI claim cites a case or solution; "no relevant history" is a valid answer.
-3. **Evidence over opinion:** solutions carry a track record (applied / succeeded / failed, per version).
-4. **Environment matters:** similarity includes version, module and integration, not just text.
-5. **Every case improves the base:** knowledge capture is part of closing a case, not an extra chore.
-6. **Not another ticket tool:** we model the *knowledge loop*; the case is just where it starts.
+### 1.4 Rules I followed
 
-### 1.5 How it maps to Case-Based Reasoning
+1. The engineer decides. The AI only suggests and never changes data on its own.
+2. Every AI claim points to a case or solution. "Nothing relevant found" is a valid answer.
+3. Solutions show how often they worked and failed, per version.
+4. Similarity looks at version, module and integrations, not only text.
+5. Saving knowledge is part of closing a case, not extra work later.
+6. It isn't another ticket tool. The focus is the knowledge loop, and the case is where it starts.
 
-| CBR step | SEP feature |
+### 1.5 Mapping to case-based reasoning
+
+| Step | In SEP |
 |---|---|
-| Retrieve | Hybrid search + Retrieval agent |
-| Reuse | Solution recommendations + Applicability check |
-| Revise | Investigation workspace + Investigation Guide agent |
-| Retain | Knowledge Capture agent + Architect approval |
+| Retrieve | Hybrid search and the retrieval agent |
+| Reuse | Solution suggestions with an applicability verdict |
+| Revise | Investigation log and next-step suggestions |
+| Retain | Knowledge capture and architect approval |
 
----
+## 2. Flows
 
-## 2. User & workflow flows
-
-### 2.1 End-to-end flow (the demo story)
+### 2.1 Main flow
 
 ```mermaid
 flowchart LR
-    A[Customer report<br/>email / portal] --> B[New Case<br/>in Directus]
-    B -->|Flow: case created| C[Intake Agent<br/>structure + missing info]
-    C --> D[Retrieval Agent<br/>hybrid search + graph walk]
-    D --> E[Applicability Check<br/>env vs solution conditions]
-    E --> F[Investigation Guide<br/>hypotheses + next steps]
+    A[Customer report<br/>email / portal] --> B[New case<br/>in Directus]
+    B -->|Flow: case created| C[Intake<br/>structure + missing info]
+    C --> D[Retrieval agent<br/>hybrid search + tools]
+    D --> E[Applicability check<br/>environment vs solution]
+    E --> F[Planner<br/>hypotheses + next steps]
     F --> G[Engineer Workspace]
     G -->|logs findings| F
-    G -->|accept / reject suggestions| H[(Feedback)]
-    G -->|resolves case| I[Knowledge Capture Agent<br/>create / merge / link]
+    G -->|accept / reject| H[(Feedback)]
+    G -->|resolves case| I[Knowledge capture<br/>link / update / create]
     I --> J{Architect<br/>approval}
-    J -->|approve| K[(Validated Solution<br/>+ track record)]
-    J -->|reject / edit| I
+    J -->|approve| K[(Solution<br/>+ track record)]
+    J -->|reject| G
     K -->|re-indexed| D
 ```
 
-### 2.2 Engineer journey (step by step)
+### 2.2 What the engineer does
 
-1. **Case arrives.** The engineer opens it in the *Engineer Workspace*. Within seconds the analysis panel fills in, and the engineer can watch the agent's steps live (tools called, cases pulled, reasoning).
-2. **Structured view.** The AI has extracted module, version, integration, symptoms and error codes. Missing information is flagged ("Which export profile? When was the last successful run?") with a **draft customer message**.
-3. **Have we seen this before?** A ranked list of similar cases and solutions, each with *why it matches*, a *track record* and an *applicability verdict* (`applies` / `applies with changes` / `likely not applicable`, plus the reason).
-4. **What should I check next?** Ranked hypotheses with concrete checks. The engineer records findings (`confirmed` / `ruled out` / `inconclusive`), and the guide **re-plans** after each one.
-5. **Resolve.** The engineer marks which solution was applied and the outcome, or describes a new fix.
-6. **Retain.** The Knowledge Capture agent proposes: *link to an existing solution*, *update an existing solution* (e.g. add the v9 variant), or *create a new solution*. The architect approves in one click.
-7. **Loop closed.** The next similar case finds the new knowledge immediately.
+1. **A case comes in.** The engineer opens it in the Engineer Workspace. While the agents run, each step shows up in a live trace (which tools were called, what was found).
+2. **Structured case.** The AI fills in module, integrations, symptoms and error codes. It lists missing information (for example "when did the last export work?") and drafts a message to the customer.
+3. **Have we seen this before?** A ranked list of solutions and similar cases. Each one shows why it matches, its track record and a verdict: applies, applies with changes, or not applicable, with the reason.
+4. **What do I check next?** Hypotheses and next steps. The engineer logs findings as confirmed, ruled out or inconclusive and can ask for new next steps based on them.
+5. **Resolve.** The engineer writes what fixed it and marks which solution was used.
+6. **Save the knowledge.** The capture agent proposes to link the case to an existing solution, update a solution (for example add the 9.x variant), or create a new one. The architect checks and approves it.
+7. **Done.** The next similar case finds this knowledge straight away.
 
-### 2.3 Case lifecycle
+### 2.3 Case status
 
 ```mermaid
 stateDiagram-v2
     [*] --> new
-    new --> analysing: Flow triggers Intake
+    new --> analysing: Flow starts analysis
     analysing --> triage: analysis ready
     triage --> waiting_customer: info missing
     waiting_customer --> investigating: customer replied
     triage --> investigating
-    investigating --> resolved: fix applied + verified
+    investigating --> resolved: fix applied
     resolved --> knowledge_review: capture proposal created
-    knowledge_review --> closed: approved / linked
+    knowledge_review --> closed: approved
     resolved --> investigating: reopened
     closed --> [*]
 ```
 
-### 2.4 Solution (knowledge) lifecycle, aligned with KCS
+### 2.4 Solution status (KCS)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft: Capture agent / engineer
+    [*] --> draft: created by capture or engineer
     draft --> not_validated: architect approves content
-    not_validated --> validated: first successful reuse<br/>or architect sign-off
+    not_validated --> validated: worked on a case<br/>or architect sign-off
     validated --> validated: reuse updates track record
-    validated --> needs_review: failure on reuse /<br/>new release touches module
+    validated --> needs_review: failed on reuse
     needs_review --> validated: revised
-    validated --> archived: obsolete
+    validated --> archived: no longer valid
     archived --> [*]
 ```
 
----
+## 3. Scope
 
-## 3. Functional scope & priorities
+### Must have (all built)
 
-### Must have (complete CBR loop)
 | ID | Feature |
 |---|---|
-| M1 | Data model in Directus/Postgres: customers, environments, releases, modules, integrations, cases, investigation steps, root causes, solutions, case↔solution outcomes, case links |
-| M2 | Realistic synthetic dataset (~80 cases, ~25 solutions, ~12 customers, releases with breaking changes) incl. traps and recurring clusters |
-| M3 | Hybrid search in PostgreSQL: FTS + pgvector + trigram, RRF fusion, structured boosts |
-| M4 | **Intake agent:** raw report → structured fields, missing-info list |
-| M5 | **Retrieval agent:** ReAct tool loop over search + relations, LLM re-rank with rationale |
-| M6 | **Investigation Guide:** hypotheses, next checks, citations; re-plans on new findings |
-| M7 | **Knowledge Capture agent:** create / merge / link proposal on resolve |
-| M8 | Human approval: agents write `ai_suggestions` only; approval applies them |
-| M9 | Directus Flows triggering agents on case create / resolve / solution approve |
-| M10 | **Engineer Workspace** custom Directus module |
-| M11 | One-command setup (`docker compose up`) + seed + bootstrap scripts |
+| M1 | Data model in PostgreSQL, managed in Directus: customers, environments, releases, modules, integrations, cases, investigation steps, root causes, solutions, case-solution outcomes, case links |
+| M2 | Sample dataset: 78 cases, 27 solutions, 12 customers, releases 8.0 to 9.2 with breaking changes, with traps and a group of related open cases |
+| M3 | Hybrid search in PostgreSQL: full text, pgvector and trigram, merged with RRF, boosted by module, version, integration and track record |
+| M4 | Intake: customer text to structured fields and missing information |
+| M5 | Retrieval agent: tool loop over search, cases, solutions, customer history and release notes |
+| M6 | Planner: hypotheses and next steps with sources, re-planned from the investigation log |
+| M7 | Knowledge capture on resolve: link, update or create |
+| M8 | Human approval: agents only write `ai_suggestions`, a person applies them |
+| M9 | Directus Flows start the agents on case create and update |
+| M10 | Engineer Workspace as a custom Directus module |
+| M11 | Setup with Docker Compose and one setup command |
 
-### Should have (what makes it stand out)
-| ID | Feature |
-|---|---|
-| S1 | **Live agent trace** shown live in the workspace (agent steps are written to Postgres and polled) |
-| S2 | **Applicability check** using environment + release notes (breaking changes between versions) |
-| S3 | Solution **track record** (applied / success / failure, per version) shown everywhere |
-| S4 | Suggestion **feedback** (accept / reject / edit + reason) feeding ranking |
-| S5 | **Customer clarification draft** from missing-info analysis |
-| S6 | **Evaluation harness:** hit@k, MRR, ablation (hybrid vs vector vs FTS), LLM-as-judge for guidance quality |
-| S7 | **Guardrails:** untrusted-input handling (prompt-injection defence), PII masking, citation validation, schema-validated outputs |
-| S8 | **Observability:** `agent_runs` + `agent_steps` (tool calls, tokens, latency, errors) |
-| S9 | "Ask the case" chat: free questions about the case grounded in history |
+### Should have
 
-### Future / stretch
-| ID | Feature |
-|---|---|
-| F1 | **Problem Management agent:** cluster recurring unsolved cases → propose ITIL Problem record |
-| F2 | **Knowledge graph view** (case ↔ solution ↔ root cause ↔ module) |
-| F3 | **Knowledge health:** flag solutions touched by a new release; detect duplicates |
-| F4 | **Insights dashboard:** MTTR, reuse rate, knowledge coverage, AI acceptance rate |
-| F5 | Tests + GitHub Actions CI |
-| F6 | Production concerns: SSO, multi-tenant isolation, data residency, on-prem LLM option |
+| ID | Feature | Status |
+|---|---|---|
+| S1 | Live agent trace in the workspace | Built (polling `agent_steps`) |
+| S2 | Applicability check with release changes between versions | Built |
+| S3 | Track record per solution and per major version | Built |
+| S4 | Accept / reject with a note on every suggestion | Built (stored, not yet used for ranking) |
+| S5 | Draft message to the customer for missing info | Built |
+| S6 | Retrieval evaluation on held-out cases | Held-out set ready, evaluation script not done |
+| S7 | Guardrails: prompt injection handling, masking e-mails and phone numbers, citation check, validated outputs | Built |
+| S8 | Logging of runs and steps (tool calls, tokens, time, errors) | Built |
+| S9 | "Ask about this case" | Built |
 
----
+### Extra / later
+
+| ID | Feature | Status |
+|---|---|---|
+| F1 | Problem detection: group related open cases and propose an ITIL problem | Built |
+| F2 | Graph view of cases, solutions and causes | Not built |
+| F3 | Flag solutions affected by a new release, find duplicates | Not built |
+| F4 | Insights dashboard | Basic Directus dashboard built |
+| F5 | Tests and CI | Not built |
+| F6 | Production topics: SSO, data residency, on-prem LLM | Not built |
 
 ## 4. Architecture
 
-### 4.1 Component view
+### 4.1 Components
 
 ```mermaid
 flowchart TB
     subgraph Client
-        WS[Engineer Workspace<br/>custom Directus module · Vue 3]
-        DS[Directus Data Studio<br/>collections, approvals, dashboards]
+        WS[Engineer Workspace<br/>Directus module, Vue 3]
+        DS[Directus Data Studio<br/>collections, dashboard]
     end
 
-    subgraph Directus["Directus 11 (Node)"]
-        API[REST / GraphQL API<br/>auth · roles · permissions]
+    subgraph Directus["Directus 11"]
+        API[REST API<br/>auth, roles, permissions]
         FL[Flows<br/>event triggers]
-        EP[Endpoint extension<br/>/sep proxy + approvals]
-        REV[Revisions & Activity<br/>audit trail]
+        EP[SEP endpoint<br/>/sep proxy + approvals]
+        REV[Revisions and activity<br/>audit trail]
     end
 
-    subgraph Agents["Agent Service (Python · FastAPI · LangGraph)"]
-        ORCH[Graph orchestrator]
+    subgraph Agents["Agent service (Python, FastAPI, LangGraph)"]
+        ORCH[Graphs]
         AG1[Intake]
-        AG2[Retrieval]
-        AG3[Applicability + Guide]
-        AG4[Knowledge Capture]
-        TOOLS[Tools<br/>search · fetch · releases · suggest]
-        PROV[Provider layer<br/>LLM + Embeddings]
+        AG2[Retrieval agent]
+        AG3[Applicability + planner]
+        AG4[Knowledge capture]
+        TOOLS[Tools<br/>search, cases, solutions, releases]
+        PROV[LLM and embedding providers]
     end
 
     subgraph Data["PostgreSQL 16"]
         BIZ[(Business tables<br/>cases, solutions, ...)]
-        IDX[(Search index<br/>pgvector · tsvector · pg_trgm)]
-        OBS[(agent_runs · agent_steps<br/>ai_suggestions)]
+        IDX[(Search index<br/>pgvector, tsvector, pg_trgm)]
+        OBS[(agent_runs, agent_steps,<br/>ai_suggestions)]
     end
 
-    LLM[[Gemini API<br/>fallback: Groq / Claude]]
+    LLM[[Gemini API<br/>model fallback chain]]
     EMB[[Ollama<br/>nomic-embed-text, local]]
 
     WS --> API
@@ -192,35 +191,33 @@ flowchart TB
     DS --> API
     API --> BIZ
     FL -->|webhook| ORCH
-    EP -->|proxy / stream| ORCH
+    EP -->|proxy| ORCH
     ORCH --> AG1 & AG2 & AG3 & AG4
     AG1 & AG2 & AG3 & AG4 --> TOOLS
-    TOOLS -->|read/write via API<br/>service account| API
+    TOOLS -->|read + suggestions<br/>agent user| API
     TOOLS -->|hybrid search SQL| IDX
     ORCH --> OBS
     PROV --> LLM
     PROV --> EMB
 ```
 
-### 4.2 Responsibilities
+### 4.2 What each part does
 
-| Component | Responsibility | Why here |
+| Part | Job | Why |
 |---|---|---|
-| **PostgreSQL** | System of record + search engine (vectors, FTS, trigram, RRF function) | One database, transactional consistency between knowledge and its index; no extra vector DB to operate |
-| **Directus** | Data model, API, auth/roles, Flows, admin UI, audit, Engineer Workspace host | Gives an enterprise-grade backend + admin for free; we spend our time on the knowledge loop |
-| **Agent Service** | Agent graphs, tools, prompts, LLM/embedding providers, evaluation | Python has the strongest AI ecosystem; long-running LLM work does not belong in the Directus process |
-| **Ollama** | Local embeddings | Free, private, no rate limits, fast enough on a laptop GPU |
-| **Gemini API** | Reasoning / tool calling | Strong function calling on a free tier; swappable via provider interface |
+| PostgreSQL | Stores all data and is also the search engine (vectors, full text, trigram, RRF function) | One database, so the data and its index stay in sync and there's no separate vector database to run |
+| Directus | Data model, API, login and roles, Flows, admin UI, audit trail, hosts the Engineer Workspace | Gives the backend and admin parts out of the box, so I could spend the time on the knowledge loop |
+| Agent service | Agent graphs, tools, prompts, LLM and embedding calls, indexing | Python has the best AI libraries, and long LLM calls shouldn't run inside Directus |
+| Ollama | Embeddings on the local machine | Free, private, no rate limits |
+| Gemini | Reasoning and tool calling | Good tool calling on the free tier, and can be swapped through the provider layer |
 
-### 4.3 Key architectural decisions
+### 4.3 Main decisions
 
-1. **Agents go through the Directus API with a service account** (not raw SQL) for all business reads/writes. They obey the same permissions and appear in the same audit trail as humans. *Exception:* hybrid search calls a read-only SQL function directly (Directus cannot express vector similarity).
-2. **Agents write suggestions, not facts.** Only `ai_suggestions` and `agent_runs` are writable by the agent role. Applying a suggestion is a human action (or a Flow triggered by human approval).
-3. **Event-driven via Directus Flows:** `cases.items.create` → analysis; `cases.status = resolved` → knowledge capture; `solutions` approved → re-embed. The UI also calls agents on demand through the endpoint extension.
-4. **Provider abstraction:** `LLMProvider` / `EmbeddingProvider` interfaces; switching Gemini ↔ Groq ↔ Claude ↔ local is configuration.
-5. **Search index separated from business tables:** `knowledge_chunks` holds text chunks + embeddings for cases and solutions, kept in sync by Flows. Business tables stay clean in Directus.
-
----
+1. **Agents read business data through the Directus API** with their own user, so they follow the same permissions and show up in the same audit trail as people. The exceptions are hybrid search, which calls a SQL function directly because Directus can't do vector search, and the run and step logging.
+2. **Agents write suggestions, not data.** The agent role can only read, create suggestions and change the case status. Applying a suggestion is done by a person, with that person's permissions.
+3. **Flows start the work:** creating a case starts the analysis, and setting it to resolved starts knowledge capture. The workspace can also start runs directly through the SEP endpoint.
+4. **Provider layer:** the LLM and embedding providers sit behind one interface, so switching models is a config change.
+5. **The search index is separate** from the business tables, in its own `search` schema, so Directus doesn't show it and it can be rebuilt any time.
 
 ## 5. Data model (ERD)
 
@@ -273,7 +270,9 @@ erDiagram
     }
     RELEASES {
         uuid id PK
-        string version "e.g. 9.1.0"
+        string version "e.g. 9.1"
+        int version_major
+        int version_minor
         date release_date
         text summary
     }
@@ -282,18 +281,20 @@ erDiagram
         uuid release_id FK
         uuid module_id FK
         string change_type "feature|fix|breaking|deprecation"
+        string title
         text description
     }
     MODULES {
         uuid id PK
-        string code "EXPORT|IMPORT|CLASSIFICATION|..."
+        string code "EXPORT|IMPORT|WORKFLOW|..."
         string name
         text description
     }
     INTEGRATIONS {
         uuid id PK
+        string code
         string name "SAP S/4HANA, Shopware 6, ..."
-        string type "erp|webshop|marketplace|dam|print|pim_exchange"
+        string type "erp|webshop|marketplace|dam|print|translation|data_exchange"
     }
     ENVIRONMENT_INTEGRATIONS {
         uuid environment_id FK
@@ -307,7 +308,7 @@ erDiagram
     }
     CASES {
         uuid id PK
-        string case_number "CS-2025-0142"
+        string case_number
         string title
         text customer_report "raw, untrusted"
         text customer_goal
@@ -315,6 +316,7 @@ erDiagram
         text error_messages
         text steps_to_reproduce
         uuid environment_id FK
+        string epim_version "version at the time"
         uuid module_id FK
         uuid root_cause_id FK
         uuid problem_id FK
@@ -324,8 +326,6 @@ erDiagram
         json missing_info
         text resolution_summary
         uuid assigned_to FK "directus_users"
-        timestamp opened_at
-        timestamp resolved_at
     }
     INVESTIGATION_STEPS {
         uuid id PK
@@ -340,17 +340,17 @@ erDiagram
     }
     ROOT_CAUSES {
         uuid id PK
-        string code "CFG-EXPORT-FILTER"
-        string category "configuration|data|product_bug|integration|infrastructure|upgrade|user_error"
+        string code
+        string category "configuration|data|product_bug|integration|..."
         string name
         text description
     }
     SOLUTIONS {
         uuid id PK
-        string solution_number "SOL-0031"
+        string solution_number "SOL-016"
         string title
-        text issue "KCS: customer words"
-        text environment_conditions "KCS: where it applies"
+        text issue "KCS"
+        text environment_conditions "KCS"
         text cause "KCS"
         text resolution_steps "KCS"
         text verification_steps
@@ -358,8 +358,9 @@ erDiagram
         string min_version
         string max_version
         string status "draft|not_validated|validated|needs_review|archived"
-        int times_applied
-        int times_successful
+        int times_applied "trigger"
+        int times_successful "trigger"
+        int times_failed "trigger"
         boolean ai_generated
         uuid approved_by FK
         timestamp approved_at
@@ -396,19 +397,21 @@ erDiagram
         uuid id PK
         string title
         text description
-        string status "open|known_error|resolved"
+        string status "proposed|open|known_error|resolved|rejected"
         uuid root_cause_id FK
+        boolean ai_generated
     }
     AGENT_RUNS {
         uuid id PK
         uuid case_id FK
-        string graph "case_analysis|guide|knowledge_capture"
+        string graph "case_analysis|investigation_guide|knowledge_capture|ask_case|problem_detection"
         string status "running|succeeded|failed"
+        string trigger "flow|manual|eval"
         string model
         int tokens_in
         int tokens_out
         int latency_ms
-        json error
+        text error
         timestamp started_at
         timestamp finished_at
     }
@@ -417,8 +420,9 @@ erDiagram
         uuid run_id FK
         int seq
         string node "intake|retrieval|..."
-        string type "thought|tool_call|tool_result|output"
+        string type "node_start|thought|tool_call|tool_result|output|error|guardrail"
         string tool_name
+        text summary
         json payload
         timestamp created_at
     }
@@ -426,11 +430,13 @@ erDiagram
         uuid id PK
         uuid case_id FK
         uuid run_id FK
-        string type "structure|similar_case|solution|next_step|clarification|knowledge_create|knowledge_update|case_link"
+        string type "case_structure|solution|hypothesis|next_step|clarification|knowledge_*|problem|..."
+        string title
         json payload
         text rationale
         string confidence "high|medium|low"
-        json citations "case/solution ids"
+        int rank
+        json citations
         string status "pending|accepted|rejected|edited|superseded"
         text feedback_note
         uuid decided_by FK
@@ -438,279 +444,250 @@ erDiagram
     }
 ```
 
-**Search index (owned by the agent service, hidden in Directus):**
+**Search index** (schema `search`, not shown in Directus):
 
 ```sql
-knowledge_chunks (
-  id uuid PK,
-  entity_type text,        -- 'case' | 'solution'
-  entity_id uuid,
-  chunk_type text,         -- 'symptoms' | 'resolution' | 'cause' | 'full'
-  content text,
-  embedding vector(768),   -- pgvector, HNSW index
-  tsv tsvector,            -- GIN index, generated column
-  metadata jsonb,          -- module, version, integrations, status, outcome stats
-  updated_at timestamptz
+search.knowledge_chunks (
+  id          uuid PK,
+  entity_type text,          -- 'case' | 'solution'
+  entity_id   uuid,
+  chunk_type  text,          -- 'problem' | 'resolution' | 'issue' | 'fix'
+  content     text,
+  codes       text,          -- error codes, trigram index
+  embedding   vector(768),   -- HNSW index
+  tsv         tsvector,      -- generated, GIN index
+  metadata    jsonb,         -- modules, integrations, version, track record
+  updated_at  timestamptz
 )
 ```
 
-### Why this model (defensible choices)
-- **Case ≠ Solution (D1):** one solution can resolve many cases; a case can try several solutions. The **outcome lives on the relation** (D2), which is what makes "worked 7/8 times, failed on v9" possible.
-- **Environment as structured data (D3):** customer → environment → release + modules + integrations. Applicability is computed, not guessed.
-- **Release changes:** lets the agent reason *"fix verified on 8.x, but 9.0 has a breaking change in EXPORT"*.
-- **Investigation steps (D4):** preserves the path, including ruled-out hypotheses, which the Guide uses ("in 3 similar cases, the export filter was checked first and ruled out").
-- **Root-cause taxonomy:** a shared vocabulary for cases, solutions and problem clustering.
-- **AI tables:** every AI output is traceable (`agent_runs` → `agent_steps`) and every suggestion has a human decision, which serves audit, trust and evaluation at once.
+### Why the model looks like this
 
----
+- **Cases and solutions are separate (D1).** One solution can fix many cases, and one case can try several solutions. The outcome is stored on `case_solutions` (D2), which is what makes "worked 7 of 8 times, failed on 9.x" possible. A trigger keeps the counts on the solution up to date.
+- **The environment is structured (D3):** customer, environment, release, modules and integrations. Applicability can be checked from data instead of guessed.
+- **Release changes** let the agent see things like "this fix was proven on 8.x, but 9.0 has a breaking change in the export module".
+- **Investigation steps (D4)** keep the path, including what was ruled out.
+- **Root causes** give cases, solutions and problems a shared list of causes.
+- **AI tables:** every run can be traced (`agent_runs`, `agent_steps`), and every suggestion has a human decision. This helps with audit, trust and later evaluation.
 
 ## 6. Search design
 
 ```mermaid
 flowchart LR
-    Q[Query: case text +<br/>structured features] --> E[Embed<br/>Ollama]
+    Q[Query: case text +<br/>module, version, integrations] --> E[Embed<br/>Ollama]
     Q --> T[tsquery]
-    E --> V[pgvector<br/>cosine top-50]
-    T --> F[FTS ts_rank<br/>top-50]
-    Q --> G[pg_trgm<br/>error codes top-50]
+    E --> V[pgvector<br/>cosine]
+    T --> F[Full text<br/>ts_rank]
+    Q --> G[pg_trgm<br/>error codes]
     V & F & G --> R[RRF fusion<br/>SQL function]
-    R --> B[Structured boost<br/>module · version distance ·<br/>integration overlap · solution success rate]
-    B --> L[LLM re-rank top-15<br/>+ rationale]
-    L --> O[Top-k with<br/>why-it-matches]
+    R --> B[Boosts<br/>module, version,<br/>integration, track record]
+    B --> L[Retrieval agent and<br/>applicability check]
+    L --> O[Ranked suggestions<br/>with reasons]
 ```
 
-- `sep_hybrid_search(query_text, query_embedding, filters jsonb, k)` is one PostgreSQL function, testable on its own and usable from both the agent and the evaluation harness.
-- RRF needs no score normalisation, so it is robust when combining very different scoring scales.
-- Boosts are transparent and explainable (each candidate returns its score breakdown, shown in the UI).
-- The evaluation harness compares variants: FTS-only, vector-only, hybrid, hybrid+boost, hybrid+boost+re-rank.
+- `search.hybrid_search(...)` is one PostgreSQL function, used by the agents and by the search box in the workspace.
+- RRF works on ranks, not scores, so the three very different scores don't need to be normalised.
+- Each result comes with a breakdown (rank per method and each boost), so it's clear why something matched.
 
----
+## 7. AI agents
 
-## 7. AI / agentic architecture
+### 7.1 Approach
 
-### 7.1 Design stance
-A **graph-orchestrated workflow with agentic nodes** (research §7): deterministic steps where the path is known, a ReAct tool loop only where the path varies (retrieval, investigation planning), and **human interrupts** where responsibility lies with a person.
+A fixed LangGraph workflow, with one tool-using agent only in the step where the path really varies (retrieval). The engineer approves everything that changes data (research section 7).
 
 ### 7.2 Graphs
 
-**Graph A: Case Analysis** (trigger: case created, or "re-analyse")
+**Case analysis** (when a case is created, or on "re-analyse")
 
 ```mermaid
 flowchart LR
-    S((start)) --> G0[Guardrails<br/>PII mask · injection fence]
+    S((start)) --> L[Load case<br/>+ environment]
+    L --> G0[Guardrails<br/>mask PII, fence input]
     G0 --> I[Intake<br/>structured output]
-    I --> R[Retrieval agent<br/>ReAct + tools]
-    R --> A[Applicability<br/>evaluator]
-    A --> P[Investigation planner]
-    P --> V[Validate<br/>citations · schema]
-    V -->|invalid| P
-    V --> W[Write ai_suggestions]
+    I --> R[Retrieval agent<br/>tools loop]
+    R --> A[Applicability<br/>facts + LLM verdict]
+    A --> P[Planner<br/>hypotheses + next steps]
+    P --> W[Write ai_suggestions]
     W --> X((end))
 ```
 
-**Graph B: Investigation Guide** (trigger: engineer logs a finding or asks a question)
-Loads the case state + findings so far → updates hypothesis ranking (confirmed / ruled out) → proposes the next 1–3 checks → may call Retrieval again with new evidence (e.g. a newly found error code).
+**Investigation guide** (button "Suggest next steps"): reads the investigation log, searches again with what was found and suggests new next steps.
 
-**Graph C: Knowledge Capture** (trigger: case resolved)
+**Knowledge capture** (when the case is set to resolved)
 
 ```mermaid
 flowchart LR
-    S((start)) --> SUM[Summarise case<br/>Issue · Env · Cause · Resolution]
+    S((start)) --> SUM[Summarise case<br/>issue, environment, cause, fix]
     SUM --> DUP[Search existing solutions]
     DUP --> D{Decide}
-    D -->|same fix exists| LINK[Propose link +<br/>track record update]
-    D -->|fix differs by env/version| UPD[Propose solution update<br/>e.g. add v9 variant]
-    D -->|new knowledge| NEW[Propose new solution draft]
-    LINK & UPD & NEW --> INT[[Interrupt:<br/>architect approval]]
-    INT -->|approve| APPLY[Flow applies change<br/>re-embed · stats]
-    INT -->|edit / reject| D
+    D -->|same fix exists| LINK[Propose link]
+    D -->|fix differs by version/env| UPD[Propose update]
+    D -->|new knowledge| NEW[Propose new solution]
+    LINK & UPD & NEW --> INT[[Architect reviews<br/>in the workspace]]
+    INT -->|approve| APPLY[Endpoint applies it<br/>track record + re-index]
+    INT -->|reject| X((end))
 ```
 
-### 7.3 Agents and their tools
+**Problem detection** (nightly Flow or the Problems page): groups open cases without a solution by embedding similarity, and the LLM decides whether a group shares a cause and proposes a problem record.
 
-| Agent | Input | Output (schema-validated) | Tools |
+**Ask** ("Ask about this case"): answers a question using search and the case history, with sources.
+
+### 7.3 Steps and tools
+
+| Step | Input | Output | Tools |
 |---|---|---|---|
-| **Intake** | Raw report + known environment | Module, symptoms, error codes, goal, severity hint, `missing_info[]`, clarification draft | `get_environment` |
-| **Retrieval** | Structured case | Ranked candidates with `why_it_matches`, score breakdown | `hybrid_search`, `get_case`, `get_solution`, `get_related_cases`, `get_solution_track_record` |
-| **Applicability** | Candidate solutions + environment | Verdict per solution: `applies` / `applies_with_changes` / `not_applicable` + reason | `get_release_changes(from, to, module)`, `compare_environments` |
-| **Investigation Guide** | Case + candidates + findings | Hypotheses (ranked, with evidence), next checks, citations | `get_investigation_steps`, `hybrid_search`, `get_case` |
-| **Knowledge Capture** | Resolved case | Create / update / link proposal with diff | `hybrid_search(solutions)`, `get_solution` |
+| Intake | Customer text and environment | Module, integrations, symptoms, error codes, goal, severity, missing info, message to customer | none |
+| Retrieval agent | Structured case | Ranked cases and solutions with reasons | `search_knowledge`, `get_case`, `get_solution`, `get_customer_history`, `get_release_changes` |
+| Applicability | Candidate solutions and environment | Verdict per solution with reason | Code collects version range, module and integration overlap, track record, release changes, history at this customer |
+| Planner | Case, candidates, findings | Hypotheses, next steps, sources | none |
+| Knowledge capture | Resolved case | Link, update or create proposal | hybrid search over solutions |
 
-All tool calls are logged to `agent_steps` and streamed to the Workspace (S1).
+Every tool call and result is saved in `agent_steps` and shown in the workspace trace.
 
-### 7.4 Why this agent architecture is useful (answering the brief)
-- **Retrieval is genuinely iterative.** An engineer searching history reformulates, filters by module, opens a hit, follows it to its solution and to other cases using that solution. A single vector query cannot do this; a tool loop can.
-- **Applicability is the expensive human judgement** ("is the previous solution relevant?"). Automating the first pass with release-change data saves the most investigation time.
-- **The Guide makes history actionable**: it does not just list cases, it turns them into the next concrete check, and adapts as findings come in.
-- **Capture removes the biggest KCS failure mode**: engineers not writing knowledge after closing a case. A drafted, de-duplicated proposal makes retaining knowledge a one-click review.
+### 7.4 Why agents help here
 
-### 7.5 Guardrails & quality
-- **Untrusted input:** customer text is wrapped and labelled as data; the system prompt instructs the agents to never follow instructions found inside it; tools have least-privilege permissions (agents cannot write cases/solutions directly).
-- **PII masking** (emails, phone numbers, names) before LLM calls.
-- **Structured outputs** (Pydantic schemas) with retry on validation failure.
-- **Citation validation:** cited IDs must be in the retrieved set; otherwise the step is re-run or the claim is dropped.
-- **Abstention:** explicit "no sufficiently similar history" result below a similarity threshold.
-- **Resilience:** retry with backoff on rate limits; fallback provider.
+- **Searching history takes more than one query.** An engineer rephrases, filters by module, opens a result and follows it to its solution and to other cases. A tool loop can do this, a single vector search can't.
+- **Checking applicability takes the most judgement.** Whether an old fix still applies after an upgrade is where most time goes, and the release notes make a first check possible.
+- **The planner turns history into a next step** instead of just a list of cases.
+- **Capture fixes the usual KCS problem:** people don't write knowledge after closing a case. A ready draft that only needs approval makes it much more likely to happen.
 
----
+### 7.5 Guardrails
 
-## 8. System flows (sequence)
+- Customer text is treated as data. It's fenced in the prompt, and common prompt-injection patterns are detected and logged.
+- E-mail addresses and phone numbers are masked before anything goes to the LLM.
+- Outputs are checked against Pydantic schemas and retried with the error if invalid.
+- Only case and solution numbers that were actually retrieved in the run can be cited. Anything else is dropped.
+- "No fitting solution" is allowed.
+- If a model is overloaded, the next model in the chain is used. If the retrieval agent fails, plain hybrid search results are used.
 
-### 8.1 New case → analysis
+## 8. Sequence diagrams
+
+### 8.1 New case to analysis
 
 ```mermaid
 sequenceDiagram
     actor Eng as Engineer
     participant DS as Directus
     participant FL as Flow
-    participant AS as Agent Service
+    participant AS as Agent service
     participant PG as PostgreSQL
     participant LLM as Gemini
 
-    Eng->>DS: create case (raw report)
-    DS->>PG: insert cases
+    Eng->>DS: create case (customer text)
+    DS->>PG: insert case
     DS-->>FL: event cases.items.create
-    FL->>AS: POST /runs/case-analysis {case_id}
+    FL->>AS: POST /flows/case-event
     AS->>PG: insert agent_runs (running)
-    AS->>DS: GET case + environment (service token)
-    AS->>LLM: Intake (structured output)
-    loop Retrieval agent (ReAct)
-        AS->>LLM: decide next tool
-        AS->>PG: sep_hybrid_search(...)
-        AS->>DS: get_case / get_solution
+    AS->>DS: get case + environment (agent user)
+    AS->>LLM: intake (structured output)
+    loop Retrieval agent
+        AS->>LLM: choose next tool
+        AS->>PG: search.hybrid_search(...)
+        AS->>DS: get case / solution / release changes
     end
-    AS->>DS: get release changes
-    AS->>LLM: Applicability + Investigation plan
-    AS->>DS: POST ai_suggestions[]
-    AS->>PG: update agent_runs (succeeded, tokens, latency)
-    Eng->>DS: open Workspace (live trace + suggestions)
+    AS->>LLM: applicability + plan
+    AS->>DS: create ai_suggestions
+    AS->>PG: update agent_runs (succeeded)
+    Eng->>DS: workspace polls trace and suggestions
 ```
 
-### 8.2 Resolve → knowledge
+### 8.2 Resolve to knowledge
 
 ```mermaid
 sequenceDiagram
     actor Eng as Engineer
     actor Arc as Architect
     participant DS as Directus
+    participant EP as SEP endpoint
     participant FL as Flow
-    participant AS as Agent Service
+    participant AS as Agent service
 
-    Eng->>DS: set case resolved + case_solutions outcome
-    DS-->>FL: event cases.items.update (status=resolved)
-    FL->>AS: POST /runs/knowledge-capture {case_id}
-    AS->>DS: POST ai_suggestions (knowledge_update proposal)
-    Arc->>DS: review proposal in Workspace → approve
-    DS-->>FL: event ai_suggestions.update (accepted)
-    FL->>DS: apply: update solution, status, track record
-    FL->>AS: POST /index/solution {id} (re-embed)
+    Eng->>EP: resolve case (summary + outcomes)
+    EP->>DS: save outcomes, status = resolved
+    DS-->>FL: event cases.items.update
+    FL->>AS: POST /flows/case-event
+    AS->>DS: create ai_suggestions (knowledge proposal)
+    Arc->>EP: approve proposal
+    EP->>DS: update or create solution, case_solutions, close case (as the architect)
+    EP->>AS: re-index solution
 ```
 
----
+## 9. Technology choices
 
-## 9. Technology decisions
-
-| Area | Choice | Alternatives considered | Reason |
+| Area | Choice | Other options | Why |
 |---|---|---|---|
-| Backend platform | **Directus 11** (mandatory) | n/a | Instant API, roles, Flows, admin, audit on top of our own Postgres schema |
-| Database | **PostgreSQL 16 + pgvector + pg_trgm** (mandatory) | Separate vector DB (Qdrant, Pinecone) | One system for relational, FTS and vector data; transactional sync; simpler ops |
-| Agent runtime | **Python 3.12 · FastAPI · LangGraph** | Plain function-calling loop; CrewAI; Directus TS extension | Explicit state graphs, interrupts for approval, checkpoints; Python AI ecosystem; graph is easy to diagram and explain |
-| LLM | **Gemini (Flash) via free tier**, behind provider interface | Claude, GPT, local 7B via Ollama | Good tool calling and long context at zero cost; local 7B models are unreliable at multi-step tool use on 6 GB VRAM |
-| Embeddings | **nomic-embed-text via Ollama (local)** | Gemini / OpenAI / Voyage embeddings | Free, private, no rate limits, good retrieval quality, 768-dim |
-| Engineer UI | **Custom Directus module (Vue 3)** | Separate Next.js app | Reuses Directus auth/permissions; shows deep Directus usage; less glue code |
-| Live trace | **Polling `agent_steps`** every 1.5 s while a run is active | SSE, WebSockets | Each agent step is already a row in Postgres (audit trail), so polling it is simple, survives restarts and needs no extra infrastructure |
-| Packaging | **Docker Compose** | Manual installs | One-command reproducible setup for reviewers |
-| Validation | **Pydantic v2** | JSON schema by hand | Typed LLM outputs, automatic retries |
-| Testing | **pytest** + eval harness | n/a | Unit tests for tools/search; offline metrics for retrieval |
+| Backend | Directus 11 (required) | | API, roles, Flows, admin and audit on top of my own schema. I used 11 instead of 12 because 12 without a licence limits users and field permissions |
+| Database | PostgreSQL 16 with pgvector and pg_trgm (required) | Separate vector database (Qdrant, Pinecone) | Relational data, full text and vectors in one place, always in sync |
+| Agents | Python 3.12, FastAPI, LangGraph | Plain tool-calling loop, CrewAI, Directus TypeScript extension | Clear step graph that's easy to draw and explain, good Python AI libraries |
+| LLM | Gemini Flash models on the free tier, behind a provider interface | Claude, GPT, local models with Ollama | Good tool calling for free. Small local models were unreliable at multi-step tool use on my 6 GB GPU |
+| Embeddings | nomic-embed-text with Ollama | Gemini, OpenAI, Voyage embeddings | Free, local, no rate limits, 768 dimensions |
+| Engineer UI | Custom Directus module (Vue 3) | Separate Next.js app | Uses Directus login and permissions, less glue code |
+| Live trace | Polling `agent_steps` every 1.5 s | SSE, WebSockets | Steps are already rows in Postgres, so polling is simple and survives restarts |
+| Setup | Docker Compose | Manual installs | Same setup on every machine |
+| Validation | Pydantic v2 | Hand-written JSON schema | Typed LLM output and retries |
 
----
+## 10. Roles
 
-## 10. Security & roles
-
-| Role | Permissions |
+| Role | Can do |
 |---|---|
-| **Engineer** | CRUD own cases & investigation steps; read solutions; accept/reject suggestions on own cases |
-| **Solution Architect** | Everything Engineer can + approve/edit solutions, approve knowledge proposals, manage root causes |
-| **Agent (service account)** | Read business data; create `ai_suggestions`, `agent_runs`, `agent_steps`; **no** direct write on cases/solutions |
-| **Admin** | Full |
+| Support engineer | Create and work on cases and investigation steps, read solutions, accept or reject suggestions |
+| Solution architect | Everything the engineer can, plus edit and approve solutions and knowledge proposals |
+| AI agent (service user) | Read business data, create suggestions, runs and steps, change case status. No direct writes to cases or solutions |
+| Admin | Everything |
 
-Secrets live in `.env` (gitignored). Customer text is untrusted input (see §7.5).
+Secrets are in `.env`, which isn't committed. Customer text is untrusted (see 7.5).
 
----
+## 11. Dataset
 
-## 11. Dataset strategy
+1. **Taxonomy first:** 12 modules, 13 integrations, root causes in several categories, releases 8.0 to 9.2 with breaking changes, 12 customers with their environments.
+2. **Solution patterns:** realistic PIM problems (module, cause, version, integration), giving 27 solutions.
+3. **Cases per solution:** a few cases each, written in different customer wording, with investigation steps (including dead ends), outcomes and dates over about two years. I generated them with LLM help and then went through them by hand.
+4. **Traps on purpose:**
+   - a fix that works on 8.x and fails on 9.x
+   - the same symptom with different causes
+   - misleading error codes that look alike
+   - five open 9.2 cases with one hidden shared cause (for problem detection)
+   - solutions that were tried and failed
+5. **Held out:** 18 cases are kept aside in `eval/holdout.json` for testing retrieval.
 
-1. **Taxonomy first:** modules (~10), integrations (~12), root causes (~25 across 7 categories), releases 8.0 → 9.2 with realistic breaking changes.
-2. **Scenario matrix:** module × root cause × version × integration → pick ~25 *solution patterns* that are realistic for a PIM.
-3. **Generate cases from patterns** (LLM-assisted, seeded, then reviewed): 2–5 cases per pattern, written in varied customer language, with investigation steps (including ruled-out paths), outcomes and dates spread over ~2 years.
-4. **Deliberate traps:**
-   - *Version trap:* fix works on 8.x, fails on 9.x (breaking change)
-   - *Near-duplicates:* same symptom, different root cause
-   - *Red herrings:* misleading error messages
-   - *Recurring cluster:* several unsolved cases sharing one hidden problem (for F1)
-   - *Failed attempts:* `case_solutions` with `outcome = failed`
-5. **Validation script:** referential integrity, distribution checks, every solution has ≥1 case, held-out split.
-6. **Held-out set:** ~15 cases with known "correct" solutions, excluded from the index during evaluation.
+All companies and people in the data are made up.
 
-All data is fictional; customer names are invented.
+## 12. Evaluation
 
----
+| What | Measure | How | Status |
+|---|---|---|---|
+| Retrieval | hit@1, hit@5, MRR | Does the right solution show up for the held-out cases? | Set prepared, not run yet |
+| Search design | Comparison | Full text only vs vector only vs hybrid vs hybrid with boosts | Not run yet |
+| Applicability | Trap cases | Does the agent catch the version trap? | Checked by hand with the demo cases |
+| Groundedness | Citations | Invalid citations are logged by the validator | Built |
+| Running cost | Time and tokens per run | `agent_runs` | Built |
+| Real use (later) | Acceptance rate, time to resolve, reuse rate | Suggestion decisions and case dates | Data is collected |
 
-## 12. Evaluation plan
+## 13. Plan (15 to 28 October)
 
-| What | Metric | How |
+| Days | What |
+|---|---|
+| 15 Oct | Research, this design document, repository |
+| 16 to 18 Oct | Docker Compose, schema, Directus bootstrap, dataset and seed, search index and hybrid search |
+| 19 to 22 Oct | Agent service, intake, retrieval agent, applicability, planner, knowledge capture, Flows and SEP endpoint |
+| 23 to 25 Oct | Engineer Workspace: case view, live trace, suggestions, investigation log, resolve and review |
+| 26 to 27 Oct | Problem detection, ask, fixes, technical documentation, README |
+| 28 Oct | Presentation, final checks, submission |
+
+## 14. Risks
+
+| Risk | Effect | What I did |
 |---|---|---|
-| Retrieval quality | **hit@1, hit@5, MRR** | Held-out cases → does the known correct solution appear in top-k? |
-| Search design | **Ablation** | FTS-only vs vector-only vs hybrid vs hybrid+boost vs +LLM re-rank |
-| Applicability | Accuracy on trap cases | Does the agent flag the version trap correctly? |
-| Guidance quality | LLM-as-judge (rubric) + manual spot check | Relevance, correctness, groundedness, actionability |
-| Groundedness | % claims with valid citations | Citation validator logs |
-| Ops | Latency p50/p95, tokens per run | `agent_runs` |
-| Adoption (future, real usage) | Acceptance rate, MTTR, reuse rate | `ai_suggestions` decisions, case timestamps |
+| Free tier limits or overload on demo day | Demo fails | Model fallback chain, a recorded demo as backup |
+| Sample data feels fake | Less convincing | Based on domain research, with traps and real-looking investigation paths |
+| Learning the Directus extension SDK | UI late | Kept the workspace to a few screens |
+| LLM output not consistent | Broken UI or wrong claims | Schemas, retries, citation check, "no match" allowed |
+| Too much scope | Core not finished | Must-haves first, extras after the main demo worked |
+| Docker on Windows | Lost time | Set up early, documented the steps |
 
-Results go into the technical documentation and the presentation.
+## 15. Assumptions and open questions
 
----
-
-## 13. Implementation plan (15 → 28 Oct)
-
-| Day | Date | Deliverable |
-|---|---|---|
-| 1 | Wed 15 | Research doc, this design doc, repo + env setup |
-| 2 | Thu 16 | Docker Compose (Postgres+pgvector, Directus, Ollama link); schema as SQL migrations; Directus collections/relations/roles via bootstrap script |
-| 3 | Fri 17 | Taxonomy + releases; dataset generator; seed ~80 cases / ~25 solutions; validation script |
-| 4 | Sat 18 | `knowledge_chunks`, embedding pipeline, `sep_hybrid_search` SQL; first retrieval eval (FTS vs vector vs hybrid) |
-| 5 | Sun 19 | Agent service skeleton: providers, Directus client, run/step logging, guardrails; Intake agent |
-| 6 | Mon 20 | Retrieval agent (ReAct) + re-rank; Applicability evaluator |
-| 7 | Tue 21 | Investigation Guide (Graph B); Knowledge Capture (Graph C) with approval interrupt |
-| 8 | Wed 22 | Directus Flows wiring + endpoint extension (proxy + suggestion approval) |
-| 9 | Thu 23 | Engineer Workspace module: case view, analysis panel, live trace, suggestions with accept/reject |
-| 10 | Fri 24 | Workspace: investigation log, resolve & knowledge review; end-to-end demo path working |
-| 11 | Sat 25 | Evaluation harness + ablation results; guardrail tests; fixes |
-| 12 | Sun 26 | Stretch: Problem Management agent, insights dashboard, graph view (as far as time allows); pytest + CI |
-| 13 | Mon 27 | Technical documentation, README, diagrams exported, slides, demo script, backup recording |
-| 14 | Tue 28 | Buffer, final rehearsal, **submit** |
-
-**Milestones:** M-A (day 4) searchable dataset · M-B (day 8) agents working end-to-end via API · M-C (day 10) full demo in UI · M-D (day 13) submission package.
-
----
-
-## 14. Risks & mitigations
-
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Free-tier rate limits / outages on demo day | Demo fails | Provider abstraction + Groq fallback; cache analysis results; recorded backup demo |
-| Synthetic data feels fake | Weak credibility | Domain research (§8 research), traps, real investigation paths, manual review |
-| Directus extension learning curve | UI delay | Start with Data Studio views; module built on days 9–10 with SDK; keep UI focused on one screen |
-| LLM output inconsistency | Broken UI / wrong claims | Pydantic schemas, retries, citation validation, abstention |
-| Scope creep | Unfinished core | Must-haves first; stretch only after milestone M-C |
-| Windows/Docker setup issues | Lost day | Set up Docker on day 1–2; document setup steps |
-
----
-
-## 15. Assumptions & open questions
-
-- **Assumption:** cases arrive already associated with a customer environment (as in a real support portal). Intake can still correct or complete it.
-- **Assumption:** English-language cases for the prototype; the embedding model and design support multilingual later (relevant for a German vendor).
-- **Assumption:** a single Viamedici product line (EPIM) with modules; multi-product is a future extension.
-- **Open (for Viamedici):** Which channels do cases really arrive through? Is there an existing KB to import? What is the on-prem / data-residency requirement for LLM usage? This drives the provider choice in production.
+- Cases come in already linked to a customer environment, as in a support portal. Intake can still fill in missing details.
+- Cases are in English for the prototype. The embedding model can handle other languages later, which matters for a German company.
+- One product (EPIM) with modules. More products could be added later.
+- Open questions for Viamedici: which channels do cases really come through, is there an existing knowledge base to import, and are there on-prem or data residency rules for using an LLM? The last one decides which model provider to use in production.

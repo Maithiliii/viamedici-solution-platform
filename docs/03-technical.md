@@ -1,6 +1,6 @@
 # 03 Technical documentation
 
-This document describes how the prototype is built and how the parts work together. The reasoning behind the design is in [02 Product & Implementation](02-product-implementation.md).
+How the prototype is built and how the parts fit together. Why it is designed this way is in [02 Product & Implementation](02-product-implementation.md).
 
 ## 1. Components
 
@@ -19,15 +19,15 @@ All services run with `docker compose`. The agent service is only reachable from
 
 The full ERD is in doc 02, section 5. Schema: `db/init/02_schema.sql`.
 
-Main ideas:
+The main points:
 
-- **Case and Solution are separate entities.** A case is one customer problem; a solution is reusable knowledge (KCS article: issue, environment, cause, resolution). `case_solutions` connects them and stores what happened: `relation` (applied / referenced / derived_from), `outcome` (resolved / partial / failed / not_tried) and the EPIM version at the time.
-- **Track record is computed by the database.** A trigger on `case_solutions` updates `times_applied`, `times_successful` and `times_failed` on the solution. The view `solution_version_track_record` breaks this down per major version, which is how the agent knows that SOL-001 worked on 8.x but failed on 9.x.
-- **The customer environment is structured data:** customer -> environment -> release (version), licensed modules, integrations (with version). Cases store `epim_version` at the time of the case, because environments get upgraded.
-- **Releases and release changes** (feature / fix / breaking / deprecation, per module) let the agents reason about upgrades.
-- **Investigation steps** record what was checked, what was found and whether it confirmed or ruled out a hypothesis.
-- **Agents never write business data.** They write `ai_suggestions` (type, payload, rationale, confidence, citations). `agent_runs` and `agent_steps` are the audit trail of every run.
-- **Problems** (ITIL) group cases with a shared underlying cause.
+- Case and Solution are separate entities. A case is one customer problem; a solution is reusable knowledge (KCS article: issue, environment, cause, resolution). `case_solutions` connects them and stores what happened: `relation` (applied / referenced / derived_from), `outcome` (resolved / partial / failed / not_tried) and the EPIM version at the time.
+- Track record is computed by the database. A trigger on `case_solutions` updates `times_applied`, `times_successful` and `times_failed` on the solution. The view `solution_version_track_record` breaks this down per major version, which is how the agent knows that SOL-001 worked on 8.x but failed on 9.x.
+- The customer environment is structured data: customer -> environment -> release (version), licensed modules, integrations (with version). Cases store `epim_version` at the time of the case, because environments get upgraded.
+- Releases and release changes (feature / fix / breaking / deprecation, per module) let the agents reason about upgrades.
+- Investigation steps record what was checked, what was found and whether it confirmed or ruled out a hypothesis.
+- Agents never write business data. They write `ai_suggestions` (type, payload, rationale, confidence, citations). `agent_runs` and `agent_steps` are the audit trail of every run.
+- Problems (ITIL) group cases with a shared underlying cause.
 
 User foreign keys (`assigned_to`, `author`, `approved_by`...) are created by the bootstrap through the Directus API, because `directus_users` only exists after Directus has started.
 
@@ -35,7 +35,7 @@ User foreign keys (`assigned_to`, `author`, `approved_by`...) are created by the
 
 Schema: `db/init/03_search.sql`. Code: `agent-service/sep/indexer.py`, `sep/search.py`.
 
-**Index.** Each case and solution is split into chunks in `search.knowledge_chunks`:
+Index. Each case and solution is split into chunks in `search.knowledge_chunks`:
 
 | Entity | Chunk | Content |
 |---|---|---|
@@ -46,7 +46,7 @@ Schema: `db/init/03_search.sql`. Code: `agent-service/sep/indexer.py`, `sep/sear
 
 Each chunk has an embedding, a generated `tsvector`, the extracted error codes and metadata (modules, integrations, version, track record) used for boosting.
 
-**Query.** `search.hybrid_search(...)` runs three retrievers and fuses them:
+Query. `search.hybrid_search(...)` runs three retrievers and fuses them:
 
 1. vector similarity (HNSW, cosine)
 2. full text search (OR query over the tokens, so long reports still match)
@@ -69,7 +69,7 @@ Cases and solutions are re-indexed automatically: the Directus Flow on case upda
 
 Code: `agent-service/sep/agents/` and `sep/graphs/`.
 
-The design follows the "workflows plus agents" approach: the overall order of steps is a fixed LangGraph graph (predictable, testable), and only the step that really needs open-ended exploration (retrieval) is a tool-using agent.
+The order of steps is a fixed LangGraph graph, which keeps it predictable and easy to test. Only retrieval, where the path really varies, is a tool-using agent.
 
 ### 4.1 Case Analysis graph (runs when a case is created)
 
@@ -91,7 +91,7 @@ load -> intake -> retrieval -> applicability -> planner -> write
 | Graph | Trigger | What it does |
 |---|---|---|
 | Investigation guide | "Suggest next steps" button | Reads the investigation log (what was confirmed, what was ruled out), does more research and re-plans the next steps |
-| Knowledge capture | Case status becomes `resolved` (Flow) | Compares the resolved case with existing solutions and proposes to **link** (an existing solution fits as is), **update** (it needs an extension) or **create** (new KCS article draft). An architect reviews and approves it |
+| Knowledge capture | Case status becomes `resolved` (Flow) | Compares the resolved case with existing solutions and proposes to link (an existing solution fits as is), update (it needs an extension) or create (new KCS article draft). An architect reviews and approves it |
 | Problem detection | Nightly Flow (03:00) or the Problems page | Finds open cases without a solution, pairs them by embedding similarity (cosine >= 0.72), builds clusters of 3+ cases and lets the LLM decide whether they share a cause. Proposes problem records |
 | Ask | "Ask about this case" | Answers a free question about the case using search and case history, with sources |
 
@@ -113,7 +113,7 @@ load -> intake -> retrieval -> applicability -> planner -> write
 
 ### 4.5 Human in the loop
 
-The agent service uses its own Directus user (role "AI Agent") whose policy only allows reading, creating suggestions and changing the case status. Applying a suggestion happens in the SEP endpoint **with the logged-in user's permissions**, so Directus decides who may do what. For example, a Support Engineer cannot publish a solution; a Solution Architect can.
+The agent service uses its own Directus user (role "AI Agent") whose policy only allows reading, creating suggestions and changing the case status. Applying a suggestion happens in the SEP endpoint with the logged-in user's permissions, so Directus decides who may do what. For example, a Support Engineer cannot publish a solution; a Solution Architect can.
 
 | Suggestion | What accepting it does |
 |---|---|
@@ -129,7 +129,7 @@ Rejections are stored with an optional note.
 
 ## 5. Directus configuration
 
-Everything is created by `sep/cli/bootstrap_directus.py`, so the setup is reproducible:
+`sep/cli/bootstrap_directus.py` creates all of this, so the setup is the same every time:
 
 - collection and field metadata (folders, icons, display templates, interfaces, relations including O2M and M2M aliases)
 - policies and roles: Support Engineer, Solution Architect, AI Agent
@@ -201,8 +201,8 @@ docker compose exec postgres psql -U directus -d solution_platform
 
 ## 10. Known limitations and decisions made during the build
 
-- **Directus 11 instead of 12.** Directus 12 without a licence limits the number of users and does not allow field-level permissions, which the role model needs. Directus 11.17 has neither restriction.
-- **Free Gemini tier.** Models are sometimes overloaded; the fallback chain handles this but a run can take 30 to 90 seconds.
-- **Polling instead of streaming** for the live trace (see doc 02, technology decisions).
-- **Embeddings run on the host** through Ollama to keep the containers small; a GPU is not required.
-- **Not built yet:** the automated retrieval evaluation on the held-out cases, attachment and log file analysis, e-mail intake, and SSO.
+- Directus 11 instead of 12. Directus 12 without a licence limits the number of users and does not allow field-level permissions, which the role model needs. Directus 11.17 has neither restriction.
+- Free Gemini tier. Models are sometimes overloaded; the fallback chain handles this but a run can take 30 to 90 seconds.
+- Polling instead of streaming for the live trace (see doc 02, technology decisions).
+- Embeddings run on the host through Ollama to keep the containers small; a GPU is not required.
+- Not built yet: the automated retrieval evaluation on the held-out cases, attachment and log file analysis, e-mail intake, and SSO.
